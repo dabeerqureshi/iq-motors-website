@@ -63,6 +63,10 @@ const AdminHappyCustomersManagement = () => {
   };
 
   const handleDeleteCustomer = async (id: string | number) => {
+    if (!window.confirm("Are you sure you want to delete this customer image? This action cannot be undone.")) {
+      return;
+    }
+
     setDeleteLoadingId(id);
 
     const { error } = await deleteCustomer(id);
@@ -185,7 +189,11 @@ const AdminHappyCustomersManagement = () => {
                     onClick={() => handleDeleteCustomer(customer.id)}
                     className="bg-white/90 hover:bg-white text-red-600 hover:text-red-700"
                   >
-                    <Trash2 className="w-3 h-3" />
+                    {deleteLoadingId === customer.id ? (
+                      <div className="w-3 h-3 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3 h-3" />
+                    )}
                   </Button>
                 </div>
               </div>

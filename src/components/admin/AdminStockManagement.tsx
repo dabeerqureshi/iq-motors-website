@@ -51,6 +51,7 @@ const AdminStockManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [deleteLoadingId, setDeleteLoadingId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -155,6 +156,12 @@ const AdminStockManagement = () => {
   };
 
   const handleDeleteCar = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this vehicle? This action cannot be undone.")) {
+      return;
+    }
+
+    setDeleteLoadingId(id);
+
     try {
       const { error } = await supabase.from("stock_list").delete().eq("id", id);
 
@@ -172,6 +179,8 @@ const AdminStockManagement = () => {
         description: "Failed to remove car from stock list",
         variant: "destructive",
       });
+    } finally {
+      setDeleteLoadingId(null);
     }
   };
 
@@ -294,9 +303,14 @@ const AdminStockManagement = () => {
                   <Button
                     variant="outline"
                     size="sm"
+                    disabled={deleteLoadingId === item.id}
                     onClick={() => handleDeleteCar(item.id)}
                   >
-                    <Trash2 className="w-4 h-4" />
+                    {deleteLoadingId === item.id ? (
+                      <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
                   </Button>
                 </div>
               </TableCell>

@@ -39,7 +39,7 @@ const Servicing = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center mb-16">
               <div>
                 <p className="mb-4 text-gray-700">
-                  IQ Motors Limited Specilist in Mercedes Benz, Located in
+                  IQ Motors Limited Specialist in Mercedes Benz, Located in
                   Northfields West Ealing London, Stocking Over 30 Cars, Free
                   Delivery within 10 Miles, Charges Apply Thereafter, Open 7
                   Days A Week, Operating Appointments Only Basis - Available

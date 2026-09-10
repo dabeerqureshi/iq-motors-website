@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface CarImageGalleryProps {
@@ -14,6 +14,32 @@ const CarImageGallery = ({
 }: CarImageGalleryProps) => {
   const allImages = mainImage ? [mainImage, ...images] : images;
   const [current, setCurrent] = useState(0);
+
+  // Multi-image navigation handlers (must be declared before early return to respect rules of hooks)
+  const prev = useCallback(
+    () => setCurrent((c) => (c === 0 ? allImages.length - 1 : c - 1)),
+    [allImages.length]
+  );
+  const next = useCallback(
+    () => setCurrent((c) => (c === allImages.length - 1 ? 0 : c + 1)),
+    [allImages.length]
+  );
+
+  // Keyboard navigation for accessibility
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        prev();
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        next();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [prev, next]);
 
   // Single image: render directly, no carousel overhead.
   if (allImages.length <= 1) {
@@ -31,11 +57,6 @@ const CarImageGallery = ({
 
   // Multi-image: custom gallery with navigation (replaces shadcn Carousel,
   // which has ref-callback issues with embla v8 causing blank frames).
-  const prev = () =>
-    setCurrent((c) => (c === 0 ? allImages.length - 1 : c - 1));
-  const next = () =>
-    setCurrent((c) => (c === allImages.length - 1 ? 0 : c + 1));
-
   return (
     <div className="relative w-full">
       <div className="relative w-full pt-[75%] overflow-hidden rounded-lg border border-gray-200">

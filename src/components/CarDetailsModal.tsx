@@ -34,11 +34,11 @@ const CarDetailsModal = ({ open, onClose, car }: CarDetailsModalProps) => {
 
         <div className="mt-4 space-y-3">
           <p className="text-lg font-semibold">
-            Price: £{car.price.toLocaleString()}
+            Price: {new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(car.price)}
           </p>
           <p className="text-md">Year: {car.year}</p>
           <p className="text-md">
-            Mileage: {car.mileage.toLocaleString()} miles
+            Mileage: {new Intl.NumberFormat("en-GB").format(car.mileage)} miles
           </p>
 
           <div className="flex flex-wrap gap-2">

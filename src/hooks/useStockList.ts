@@ -88,6 +88,7 @@ export const useStockList = () => {
 
   useEffect(() => {
     fetchStockList();
+    fetchSoldCars();
   }, []);
 
   return {
