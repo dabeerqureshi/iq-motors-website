@@ -1,5 +1,8 @@
 # IQ Motors Limited — Website
 
+![Build & Deploy](https://github.com/dabeerqureshi/iq-motors-website/actions/workflows/deploy.yml/badge.svg)
+![Keep Supabase Awake](https://github.com/dabeerqureshi/iq-motors-website/actions/workflows/keep-supabase-alive.yml/badge.svg)
+
 Professional Mercedes-Benz dealership website (React 18 + Vite + TypeScript +
 Tailwind CSS + shadcn-style UI), backed by Supabase.
 
@@ -71,6 +74,30 @@ env vars above.
 
 **Vercel:** Framework preset *Vite*, build `npm run build`, output `dist`, add
 the env vars above.
+
+### GitHub Actions → Hostinger (automatic)
+
+This repo ships a production-grade CI/CD pipeline (`.github/workflows/deploy.yml`)
+that builds and deploys to Hostinger **automatically on every push to `main`**:
+
+1. PRs to `main` → lint + type-check (gatekeeper).
+2. Push to `main` → build → deploy `dist/` over SFTP to Hostinger.
+
+**Required GitHub Actions secrets** (repo → Settings → Secrets and variables →
+Actions → New repository secret):
+
+| Secret name | Value |
+|---|---|
+| `SUPABASE_URL` | Your Supabase project URL |
+| `SUPABASE_ANON_KEY` | Your Supabase anon key |
+| `EMAILJS_SERVICE_ID` | EmailJS service ID |
+| `EMAILJS_PUBLIC_KEY` | EmailJS public key |
+| `EMAILJS_TEMPLATE_ID` | EmailJS template ID |
+| `HOSTINGER_SFTP_HOST` | SFTP hostname (from hPanel → FTP Accounts) |
+| `HOSTINGER_SFTP_USER` | FTP username |
+| `HOSTINGER_SFTP_PASSWORD` | FTP password |
+| `HOSTINGER_SFTP_PORT` | SFTP port (default `22`, optional) |
+| `HOSTINGER_REMOTE_BASE` | Remote folder (default `/public_html`, optional) |
 
 ## ♻ Keep the Supabase project awake
 
