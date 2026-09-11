@@ -68,6 +68,7 @@ export default {
 					secondary: '#3B82F6',
 					accent: '#f3f4f6',
 					dark: '#1F2937',
+					surface: '#FFFFFF',
 				}
 			},
 			borderRadius: {

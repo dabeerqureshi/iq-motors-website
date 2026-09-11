@@ -86,7 +86,7 @@ create policy "Admins can delete stock"
   on public.stock_list
   for delete
   to authenticated
-  with check (public.is_admin());
+  using (public.is_admin());
 
 -- happy_customers: public read --------------------------------------------
 drop policy if exists "Public can view happy customers" on public.happy_customers;
@@ -109,7 +109,7 @@ create policy "Admins can delete happy customers"
   on public.happy_customers
   for delete
   to authenticated
-  with check (public.is_admin());
+  using (public.is_admin());
 
 -- ---------------------------------------------------------------------------
 -- 6. ADMINS table: each logged-in admin sees/updates only their own row.

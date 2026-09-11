@@ -164,7 +164,6 @@ const AdminStockManagement = () => {
   const renderTable = (cars: stock_list[], showAvail: boolean) => {
     if (loading) return (  <div className='space-y-4 py-8'><Skeleton className='h-6 w-full' /><Skeleton className='h-6 w-3/4' /><Skeleton className='h-6 w-1/2' /></div>);
 
-    const M = () => (<p className='text-xs text-gray-400'>No columns</p>);
     if (cars.length === 0)
       return (  <p className='text-center text-gray-500 py-10'>{showAvail ? 'No available cars' : 'No sold cars'}</p>);
 
@@ -172,15 +171,40 @@ const AdminStockManagement = () => {
       <div className='overflow-x-auto'>
         <Table>
           <TableHeader><TableRow><TableHead>Make / Model</TableHead><TableHead>Price</TableHead><TableHead>Year</TableHead><TableHead>Mileage</TableHead><TableHead>Available</TableHead><TableHead className='text-right'>Actions</TableHead></TableRow></TableHeader>
-          <TableBody></TableBody>
+          <TableBody>
+            {cars.map(car => (
+              <TableRow key={car.id}>
+                <TableCell className='font-medium'>{car.title}</TableCell>
+                <TableCell>£{Number(car.price).toLocaleString('en-GB')}</TableCell>
+                <TableCell>{car.year}</TableCell>
+                <TableCell>{car.miles_driven} miles</TableCell>
+                <TableCell>
+                  <Badge variant={car.is_available ? 'default' : 'secondary'}>
+                    {car.is_available ? 'Available' : 'Sold'}
+                  </Badge>
+                </TableCell>
+                <TableCell className='text-right'>
+                  <Button
+                    variant='destructive'
+                    size='sm'
+                    onClick={() => handleDeleteCar(car.id)}
+                    disabled={deleteLoadingId === car.id}
+                  >
+                    <Trash2 className='w-4 h-4 mr-1' />
+                    {deleteLoadingId === car.id ? 'Deleting...' : 'Delete'}
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
         </Table>
       </div>
     );
   };
 
   return (
-    <Card className='bg-cardealer-surface text-[#fff] shadow-lg border cardealer-secondary'>
-      <CardHeader className='border-b cardealer-secondary'><CardTitle className='text-xl'>Admin Stock Panel</CardTitle></CardHeader>
+    <Card className='bg-cardealer-surface text-cardealer-dark shadow-lg border border-cardealer-secondary'>
+      <CardHeader className='border-b border-cardealer-secondary'><CardTitle className='text-xl'>Admin Stock Panel</CardTitle></CardHeader>
       <CardContent>
         <div className='flex items-center flex-wrap gap-2 mb-4'>
           <Search className='w-4 h-4 text-gray-400' />
@@ -203,8 +227,8 @@ const AdminStockManagement = () => {
 
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild><Button className='mt-4'>Add Vehicle</Button></DialogTrigger>
-          <DialogContent className='bg-cardealer-surface text-gray-900'>
-            <DialogHeader><DialogTitle>Add New Vehicle</DialogTitle></DialogHeader>
+          <DialogContent className='bg-cardealer-surface text-cardealer-dark sm:max-w-2xl max-h-[90vh] overflow-y-auto'>
+            <DialogHeader><DialogTitle className='text-cardealer-dark'>Add New Vehicle</DialogTitle></DialogHeader>
             <div className='grid gap-3 sm:grid-cols-2'>
               <div className='space-y-2'>
                 <Label htmlFor='title'>Make / Model</Label>
