@@ -16,6 +16,11 @@ on:
   pull_request:
     branches: [main]
 
+# Prevent parallel deploys racing/overwriting each other on rapid pushes
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
 env:
   NODE_VERSION: '20'
 
@@ -147,10 +152,14 @@ jobs:
           port: ${{ secrets.HOSTINGER_SFTP_PORT || '22' }}
           username: ${{ secrets.HOSTINGER_SFTP_USER }}
           password: ${{ secrets.HOSTINGER_SFTP_PASSWORD }}
-          source: dist/
+          # Upload dist/* contents directly into the target dir.
+          # strip_components: 1 removes the leading 'dist/' so files land
+          # in /public_html root (not a nested dist/ subfolder).
+          # dist/.htaccess is listed explicitly because globs skip dotfiles.
+          source: "dist/*,dist/.htaccess"
           target: ${{ secrets.HOSTINGER_REMOTE_BASE || '/public_html' }}
           rm: true
-          strip_components: 0
+          strip_components: 1
           overwrite: true
           verbose: true
           retry: 3
