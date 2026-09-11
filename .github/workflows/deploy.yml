@@ -25,6 +25,35 @@ env:
   NODE_VERSION: '20'
 
 jobs:
+  # Fail fast and loudly when the repo secrets this pipeline needs are missing.
+  # Without these the built site cannot talk to Supabase/EmailJS and the SFTP
+  # deploy to Hostinger has no credentials.
+  check-config:
+    name: Verify deployment configuration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure required secrets are configured
+        env:
+          SFTP_HOST: ${{ secrets.HOSTINGER_SFTP_HOST }}
+          SFTP_USER: ${{ secrets.HOSTINGER_SFTP_USER }}
+          SFTP_PASS: ${{ secrets.HOSTINGER_SFTP_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON: ${{ secrets.SUPABASE_ANON_KEY }}
+          EMAILJS_SERVICE: ${{ secrets.EMAILJS_SERVICE_ID }}
+          EMAILJS_PUBLIC: ${{ secrets.EMAILJS_PUBLIC_KEY }}
+          EMAILJS_TEMPLATE: ${{ secrets.EMAILJS_TEMPLATE_ID }}
+        run: |
+          missing=""
+          for name in SFTP_HOST SFTP_USER SFTP_PASS SUPABASE_URL SUPABASE_ANON EMAILJS_SERVICE EMAILJS_PUBLIC EMAILJS_TEMPLATE; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing GitHub Actions secrets:$missing"
+            echo "Add them at https://github.com/dabeerqureshi/iq-motors-website/settings/secrets/actions"
+            exit 1
+          fi
+          echo "::notice::All required secrets are configured (Supabase + EmailJS + Hostinger SFTP)"
+
   validate:
     name: Lint & Type-check
     runs-on: ubuntu-latest
@@ -65,7 +94,7 @@ jobs:
 
   e2e:
     name: E2E Tests (Playwright)
-    needs: validate
+    needs: [validate, check-config]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -86,6 +115,14 @@ jobs:
           VITE_TEMPLATE_ID_EMAILJS: ${{ secrets.EMAILJS_TEMPLATE_ID }}
         run: npm run build
       - name: Run E2E tests
+        env:
+          # Re-export the raw secret names so the specs can skip
+          # live-backend tests when they are not configured.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          EMAILJS_SERVICE_ID: ${{ secrets.EMAILJS_SERVICE_ID }}
+          EMAILJS_PUBLIC_KEY: ${{ secrets.EMAILJS_PUBLIC_KEY }}
+          EMAILJS_TEMPLATE_ID: ${{ secrets.EMAILJS_TEMPLATE_ID }}
         run: npm run test:e2e
       - name: Upload E2E test results
         if: always()
@@ -97,7 +134,7 @@ jobs:
 
   build:
     name: Build static site
-    needs: [test, e2e]
+    needs: [test, e2e, check-config]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -131,7 +168,7 @@ jobs:
 
   deploy:
     name: Deploy to Hostinger
-    needs: [build]
+    needs: [build, check-config]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:

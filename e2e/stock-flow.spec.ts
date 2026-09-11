@@ -1,6 +1,16 @@
 import { test, expect } from '@playwright/test';
 
+// This suite exercises live Supabase data through the real built app.
+// If no backend credentials are available (e.g. local run without .env,
+// or secrets not yet wired in CI) skip instead of timing out and burning
+// the CI retries.
+const hasBackend = Boolean(
+  process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY,
+);
+
 test.describe('Stock browsing flow', () => {
+  test.skip(!hasBackend, 'Supabase backend not configured — skipping live-data tests');
+
   test('displays stock list with vehicles', async ({ page }) => {
     await page.goto('/stock');
     

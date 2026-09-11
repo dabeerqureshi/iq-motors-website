@@ -1,5 +1,14 @@
 import { test, expect } from '@playwright/test';
 
+// The submission tests call the real EmailJS API. When the keys aren't
+// configured (local runs / secrets missing) skip the send, but keep
+// validation-only tests running.
+const hasEmailJs = Boolean(
+  process.env.EMAILJS_SERVICE_ID &&
+  process.env.EMAILJS_PUBLIC_KEY &&
+  process.env.EMAILJS_TEMPLATE_ID,
+);
+
 test.describe('Contact form', () => {
   test('contact form renders all fields', async ({ page }) => {
     await page.goto('/contact');
@@ -37,6 +46,8 @@ test.describe('Contact form', () => {
   });
 
   test('submits form with valid data', async ({ page }) => {
+    test.skip(!hasEmailJs, 'EmailJS not configured — skipping submission test');
+
     await page.goto('/contact');
     
     // Fill form with valid data
@@ -53,6 +64,8 @@ test.describe('Contact form', () => {
   });
 
   test('shows loading state during submission', async ({ page }) => {
+    test.skip(!hasEmailJs, 'EmailJS not configured — skipping submission test');
+
     await page.goto('/contact');
     
     // Fill form
@@ -72,6 +85,8 @@ test.describe('Contact form', () => {
   });
 
   test('form clears after successful submission', async ({ page }) => {
+    test.skip(!hasEmailJs, 'EmailJS not configured — skipping submission test');
+
     await page.goto('/contact');
     
     // Fill and submit form
