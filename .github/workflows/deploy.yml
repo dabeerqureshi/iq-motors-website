@@ -1,8 +1,8 @@
-name: Build & Deploy
+name: Build, Test & Deploy
 
 # Production-grade CI/CD for IQ Motors.
-#  - Pull requests to main: lint + type-check (gatekeeper)
-#  - Push to main:          build + deploy to Hostinger via SFTP
+#  - Pull requests to main: lint + type-check + unit/integration tests + E2E tests
+#  - Push to main:          all above + deploy to Hostinger via SFTP
 #
 # Secrets required (repo Settings -> Secrets and variables -> Actions):
 #   - SUPABASE_URL, SUPABASE_ANON_KEY          (build-time Vite env)
@@ -36,9 +36,63 @@ jobs:
       - name: Lint
         run: npx eslint src --max-warnings=50
 
+  test:
+    name: Unit & Integration Tests
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - name: Run unit & integration tests
+        run: npm run test:run
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7
+
+  e2e:
+    name: E2E Tests (Playwright)
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+      - name: Build site for E2E tests
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          VITE_SERVICE_ID_EMAILJS: ${{ secrets.EMAILJS_SERVICE_ID }}
+          VITE_PUBLIC_KEY_EMAILJS: ${{ secrets.EMAILJS_PUBLIC_KEY }}
+          VITE_TEMPLATE_ID_EMAILJS: ${{ secrets.EMAILJS_TEMPLATE_ID }}
+        run: npm run build
+      - name: Run E2E tests
+        run: npm run test:e2e
+      - name: Upload E2E test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
   build:
     name: Build static site
-    needs: validate
+    needs: [test, e2e]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -73,6 +127,7 @@ jobs:
   deploy:
     name: Deploy to Hostinger
     needs: [build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: production
