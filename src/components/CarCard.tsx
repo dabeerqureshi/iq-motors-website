@@ -110,11 +110,11 @@ const CarCard = ({ car, linkTo }: CarCardProps) => {
   return (
     <>
       {linkTo ? (
-        <Link to={linkTo} className="block h-full" aria-label={`View details of ${car.title}`}>
+        <Link to={linkTo} className="block h-full" aria-label={`View details of ${car.title}`} data-testid="car-card">
           <Card className={cardClasses}>{cardInner}</Card>
         </Link>
       ) : (
-        <Card onClick={handleCardClick} className={cardClasses}>
+        <Card onClick={handleCardClick} className={cardClasses} data-testid="car-card">
           {cardInner}
         </Card>
       )}
