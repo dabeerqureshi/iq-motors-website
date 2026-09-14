@@ -78,8 +78,7 @@ the env vars above.
 ### GitHub Actions → Hostinger (automatic)
 
 Simple pipeline (`.github/workflows/deploy.yml`): **every push to `main` builds
-the site and uploads `dist/` to Hostinger.** No linting or tests run in CI — run
-those locally with `npm run lint`, `npm run test:run` and `npm run test:e2e`.
+the site and uploads `dist/` to Hostinger.** Nothing else runs in CI.
 
 The deploy step installs `lftp` and tries **FTPS → FTP → SFTP** in order, using
 the first method that connects, then auto-detects the web root (so it works

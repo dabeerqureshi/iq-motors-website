@@ -1,8 +1,7 @@
 name: Build & Deploy
 
 # Simple pipeline: on every push to main, build the Vite site and upload
-# dist/ to Hostinger. No linting and no tests run here.
-# Run those locally with: npm run lint, npm run test:run, npm run test:e2e
+# dist/ to Hostinger. Nothing else runs here — no linting and no tests.
 #
 # Secrets required (repo Settings -> Secrets and variables -> Actions):
 #   - SUPABASE_URL, SUPABASE_ANON_KEY          (baked into the build)
