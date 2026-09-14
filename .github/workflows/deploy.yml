@@ -1,50 +1,59 @@
-name: Build, Test & Deploy
+name: Build & Deploy
 
-# Production-grade CI/CD for IQ Motors.
-#  - Pull requests to main: lint + type-check + unit/integration tests + E2E tests
-#  - Push to main:          all above + deploy to Hostinger via SFTP
+# Simple pipeline: on every push to main, build the Vite site and upload
+# dist/ to Hostinger via SFTP. No linting and no tests run here.
+# Run those locally with: npm run lint, npm run test:run, npm run test:e2e
 #
 # Secrets required (repo Settings -> Secrets and variables -> Actions):
-#   - SUPABASE_URL, SUPABASE_ANON_KEY          (build-time Vite env)
+#   - SUPABASE_URL, SUPABASE_ANON_KEY          (baked into the build)
 #   - EMAILJS_SERVICE_ID, EMAILJS_PUBLIC_KEY, EMAILJS_TEMPLATE_ID
 #   - HOSTINGER_SFTP_HOST, HOSTINGER_SFTP_USER, HOSTINGER_SFTP_PASSWORD
-#   - (optional) HOSTINGER_SFTP_PORT (default 22), HOSTINGER_REMOTE_BASE (default /public_html)
+#   - (optional) HOSTINGER_SFTP_PORT (default 22)
+#   - (optional) HOSTINGER_REMOTE_BASE (default /public_html)
 
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
-# Prevent parallel deploys racing/overwriting each other on rapid pushes
+# Never let two deploys run at the same time (a newer push wins).
 concurrency:
-  group: production-deploy
+  group: deploy-production
   cancel-in-progress: true
 
 env:
   NODE_VERSION: '20'
 
 jobs:
-  # Fail fast and loudly when the repo secrets this pipeline needs are missing.
-  # Without these the built site cannot talk to Supabase/EmailJS and the SFTP
-  # deploy to Hostinger has no credentials.
-  check-config:
-    name: Verify deployment configuration
+  deploy:
+    name: Build & deploy to Hostinger
     runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://iq-motors.co.uk
     steps:
-      - name: Ensure required secrets are configured
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify required secrets are present
         env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SFTP_HOST: ${{ secrets.HOSTINGER_SFTP_HOST }}
           SFTP_USER: ${{ secrets.HOSTINGER_SFTP_USER }}
           SFTP_PASS: ${{ secrets.HOSTINGER_SFTP_PASSWORD }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON: ${{ secrets.SUPABASE_ANON_KEY }}
-          EMAILJS_SERVICE: ${{ secrets.EMAILJS_SERVICE_ID }}
-          EMAILJS_PUBLIC: ${{ secrets.EMAILJS_PUBLIC_KEY }}
-          EMAILJS_TEMPLATE: ${{ secrets.EMAILJS_TEMPLATE_ID }}
         run: |
           missing=""
-          for name in SFTP_HOST SFTP_USER SFTP_PASS SUPABASE_URL SUPABASE_ANON EMAILJS_SERVICE EMAILJS_PUBLIC EMAILJS_TEMPLATE; do
+          for name in SUPABASE_URL SUPABASE_ANON_KEY SFTP_HOST SFTP_USER SFTP_PASS; do
             if [ -z "${!name}" ]; then missing="$missing $name"; fi
           done
           if [ -n "$missing" ]; then
@@ -52,105 +61,7 @@ jobs:
             echo "Add them at https://github.com/dabeerqureshi/iq-motors-website/settings/secrets/actions"
             exit 1
           fi
-          echo "::notice::All required secrets are configured (Supabase + EmailJS + Hostinger SFTP)"
 
-  validate:
-    name: Lint & Type-check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-      - run: npm ci
-      - name: Type-check
-        run: npx tsc -b --noEmit
-      - name: Lint
-        run: npx eslint src --max-warnings=50
-
-  test:
-    name: Unit & Integration Tests
-    needs: validate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-      - run: npm ci
-      - name: Run unit & integration tests
-        run: npm run test:run
-      - name: Upload coverage report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: coverage/
-          retention-days: 7
-
-  e2e:
-    name: E2E Tests (Playwright)
-    needs: [validate, check-config]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-      - run: npm ci
-      - name: Install Playwright browsers
-        # CI runs Chromium-based projects only (fast). Set FULL_E2E=1
-        # variable to run the full 5-browser matrix instead.
-        run: |
-          if [ "${FULL_E2E:-}" = "1" ]; then
-            npx playwright install --with-deps
-          else
-            npx playwright install --with-deps chromium
-          fi
-      - name: Build site for E2E tests
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          VITE_SERVICE_ID_EMAILJS: ${{ secrets.EMAILJS_SERVICE_ID }}
-          VITE_PUBLIC_KEY_EMAILJS: ${{ secrets.EMAILJS_PUBLIC_KEY }}
-          VITE_TEMPLATE_ID_EMAILJS: ${{ secrets.EMAILJS_TEMPLATE_ID }}
-        run: npm run build
-      - name: Run E2E tests
-        env:
-          # Re-export the raw secret names so the specs can skip
-          # live-backend tests when they are not configured.
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          EMAILJS_SERVICE_ID: ${{ secrets.EMAILJS_SERVICE_ID }}
-          EMAILJS_PUBLIC_KEY: ${{ secrets.EMAILJS_PUBLIC_KEY }}
-          EMAILJS_TEMPLATE_ID: ${{ secrets.EMAILJS_TEMPLATE_ID }}
-        run: npm run test:e2e
-      - name: Upload E2E test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 7
-
-  build:
-    name: Build static site
-    needs: [test, e2e, check-config]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-      - run: npm ci
       - name: Build
         env:
           VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -159,36 +70,19 @@ jobs:
           VITE_PUBLIC_KEY_EMAILJS: ${{ secrets.EMAILJS_PUBLIC_KEY }}
           VITE_TEMPLATE_ID_EMAILJS: ${{ secrets.EMAILJS_TEMPLATE_ID }}
         run: npm run build
-      - name: Verify build output
+
+      - name: Check build output
         run: |
-          if [ ! -d "dist" ]; then
-            echo "::error::dist/ was not generated by the build"
+          if [ ! -f "dist/index.html" ]; then
+            echo "::error::Build did not produce dist/index.html"
             exit 1
           fi
-          echo "dist/ size:"; du -sh dist
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: iq-motors-build
-          path: dist/
-          retention-days: 1
+          du -sh dist
 
-  deploy:
-    name: Deploy to Hostinger
-    needs: [build, check-config]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    environment:
-      name: production
-      url: https://iq-motors.co.uk
-    steps:
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: iq-motors-build
-          path: dist
-          ignore-not-found: false
-
+      # Upload the contents of dist/ straight into the Hostinger web root.
+      # strip_components: 1 drops the leading "dist/" so files land in
+      # /public_html instead of a nested dist/ folder. dist/.htaccess is
+      # listed explicitly because the glob skips dotfiles.
       - name: Deploy to Hostinger via SFTP
         uses: appleboy/sftp-action@v1.7.2
         with:
@@ -196,10 +90,6 @@ jobs:
           port: ${{ secrets.HOSTINGER_SFTP_PORT || '22' }}
           username: ${{ secrets.HOSTINGER_SFTP_USER }}
           password: ${{ secrets.HOSTINGER_SFTP_PASSWORD }}
-          # Upload dist/* contents directly into the target dir.
-          # strip_components: 1 removes the leading 'dist/' so files land
-          # in /public_html root (not a nested dist/ subfolder).
-          # dist/.htaccess is listed explicitly because globs skip dotfiles.
           source: "dist/*,dist/.htaccess"
           target: ${{ secrets.HOSTINGER_REMOTE_BASE || '/public_html' }}
           rm: true
@@ -208,11 +98,6 @@ jobs:
           verbose: true
           retry: 3
           retry-interval: "30s"
-        env:
-          DEPLOY_COMMIT: ${{ github.sha }}
 
-      - name: Report
-        if: always()
-        run: |
-          echo "::notice title=Deploy complete::Build ${{ github.sha }} deployed to https://iq-motors.co.uk"
-          echo "Commit: ${{ github.sha }}"
+      - name: Done
+        run: echo "::notice title=Deployed::Commit ${{ github.sha }} is live at https://iq-motors.co.uk"

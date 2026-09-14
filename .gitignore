@@ -23,6 +23,12 @@ dist-ssr
 *.sln
 *.sw?
 
+# ---- Test / build artifacts ----
+test-results
+playwright-report
+coverage
+/playwright/.cache
+
 # ---- Secrets & local-only files (NEVER commit these) ----
 .env
 .env.*
