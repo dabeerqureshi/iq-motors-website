@@ -77,11 +77,15 @@ the env vars above.
 
 ### GitHub Actions → Hostinger (automatic)
 
-This repo ships a production-grade CI/CD pipeline (`.github/workflows/deploy.yml`)
-that builds and deploys to Hostinger **automatically on every push to `main`**:
+Simple pipeline (`.github/workflows/deploy.yml`): **every push to `main` builds
+the site and uploads `dist/` to Hostinger.** No linting or tests run in CI — run
+those locally with `npm run lint`, `npm run test:run` and `npm run test:e2e`.
 
-1. PRs to `main` → lint + type-check (gatekeeper).
-2. Push to `main` → build → deploy `dist/` over SFTP to Hostinger.
+The deploy step installs `lftp` and tries **FTPS → FTP → SFTP** in order, using
+the first method that connects, then auto-detects the web root (so it works
+whether the FTP account is rooted at the account root or already inside
+`public_html`). Credentials are written to `~/.netrc`, so passwords containing
+special characters need no escaping.
 
 **Required GitHub Actions secrets** (repo → Settings → Secrets and variables →
 Actions → New repository secret):
@@ -93,11 +97,20 @@ Actions → New repository secret):
 | `EMAILJS_SERVICE_ID` | EmailJS service ID |
 | `EMAILJS_PUBLIC_KEY` | EmailJS public key |
 | `EMAILJS_TEMPLATE_ID` | EmailJS template ID |
-| `HOSTINGER_SFTP_HOST` | SFTP hostname (from hPanel → FTP Accounts) |
-| `HOSTINGER_SFTP_USER` | FTP username |
-| `HOSTINGER_SFTP_PASSWORD` | FTP password |
-| `HOSTINGER_SFTP_PORT` | SFTP port (default `22`, optional) |
-| `HOSTINGER_REMOTE_BASE` | Remote folder (default `/public_html`, optional) |
+| `HOSTINGER_SFTP_HOST` | FTP/SFTP hostname (hPanel → Files → FTP Accounts) |
+| `HOSTINGER_SFTP_USER` | FTP/SFTP username |
+| `HOSTINGER_SFTP_PASSWORD` | FTP/SFTP password |
+| `HOSTINGER_SFTP_PORT` | *optional* — FTP/FTPS `21`, SFTP `65002` |
+| `HOSTINGER_REMOTE_BASE` | *optional* — default `/public_html` |
+
+*Optional repository **variable*** (Settings → Secrets and variables → Actions →
+**Variables** tab) `HOSTINGER_PROTOCOL` = `ftps` \| `ftp` \| `sftp` pins a single
+transfer method if the automatic fallback picks the wrong one.
+
+The build also ships [`public/.htaccess`](public/.htaccess) (Vite copies it into
+`dist/`), which adds SPA rewrites so deep links such as `/stock` or
+`/admin-IQmotors` survive a hard refresh on Apache, plus long-term caching for
+the hashed asset files.
 
 ## ♻ Keep the Supabase project awake
 
