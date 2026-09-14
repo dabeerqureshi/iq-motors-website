@@ -1,15 +1,19 @@
 name: Build & Deploy
 
 # Simple pipeline: on every push to main, build the Vite site and upload
-# dist/ to Hostinger via SFTP. No linting and no tests run here.
+# dist/ to Hostinger. No linting and no tests run here.
 # Run those locally with: npm run lint, npm run test:run, npm run test:e2e
 #
 # Secrets required (repo Settings -> Secrets and variables -> Actions):
 #   - SUPABASE_URL, SUPABASE_ANON_KEY          (baked into the build)
 #   - EMAILJS_SERVICE_ID, EMAILJS_PUBLIC_KEY, EMAILJS_TEMPLATE_ID
 #   - HOSTINGER_SFTP_HOST, HOSTINGER_SFTP_USER, HOSTINGER_SFTP_PASSWORD
-#   - (optional) HOSTINGER_SFTP_PORT (default 22)
-#   - (optional) HOSTINGER_REMOTE_BASE (default /public_html)
+#   - (optional) HOSTINGER_SFTP_PORT      FTP/FTPS -> 21, SFTP -> 65002
+#   - (optional) HOSTINGER_REMOTE_BASE    default /public_html
+#
+# Optional repo *variable* (Settings -> Secrets and variables -> Actions ->
+# Variables tab) HOSTINGER_PROTOCOL can pin the transfer method to
+# "ftps", "ftp" or "sftp" if the automatic fallback picks the wrong one.
 
 on:
   push:
@@ -79,25 +83,91 @@ jobs:
           fi
           du -sh dist
 
-      # Upload the contents of dist/ straight into the Hostinger web root.
-      # strip_components: 1 drops the leading "dist/" so files land in
-      # /public_html instead of a nested dist/ folder. dist/.htaccess is
-      # listed explicitly because the glob skips dotfiles.
-      - name: Deploy to Hostinger via SFTP
-        uses: appleboy/sftp-action@v1.7.2
-        with:
-          host: ${{ secrets.HOSTINGER_SFTP_HOST }}
-          port: ${{ secrets.HOSTINGER_SFTP_PORT || '22' }}
-          username: ${{ secrets.HOSTINGER_SFTP_USER }}
-          password: ${{ secrets.HOSTINGER_SFTP_PASSWORD }}
-          source: "dist/*,dist/.htaccess"
-          target: ${{ secrets.HOSTINGER_REMOTE_BASE || '/public_html' }}
-          rm: true
-          strip_components: 1
-          overwrite: true
-          verbose: true
-          retry: 3
-          retry-interval: "30s"
+      # Upload dist/ into the Hostinger web root.
+      #
+      # Credentials are written to ~/.netrc so a password containing special
+      # characters never has to be escaped inside a shell/lftp string.
+      # We try FTPS, then plain FTP, then SFTP and use the first that works,
+      # because Hostinger supports all three depending on the account type.
+      # After connecting we auto-detect the web root: the FTP account may or
+      # may not already be rooted inside public_html, so `cd $REMOTE || cd .`
+      # lands in the right place either way.
+      #
+      # Pin one method with the repo variable HOSTINGER_PROTOCOL (ftps|ftp|sftp).
+      - name: Install lftp
+        run: |
+          if ! command -v lftp >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq lftp
+          fi
+          lftp --version | head -1
+
+      - name: Deploy to Hostinger
+        env:
+          # Deliberately prefixed names: bare names like HOST or USERNAME can
+          # collide with shell/runner built-ins and silently lose their value.
+          SFTP_HOST: ${{ secrets.HOSTINGER_SFTP_HOST }}
+          SFTP_USER: ${{ secrets.HOSTINGER_SFTP_USER }}
+          SFTP_PASS: ${{ secrets.HOSTINGER_SFTP_PASSWORD }}
+          SFTP_PORT: ${{ secrets.HOSTINGER_SFTP_PORT }}
+          SFTP_DIR: ${{ secrets.HOSTINGER_REMOTE_BASE || '/public_html' }}
+          FORCE_PROTOCOL: ${{ vars.HOSTINGER_PROTOCOL }}
+        run: |
+          set -uo pipefail
+
+          printf 'machine %s login %s password %s\n' "$SFTP_HOST" "$SFTP_USER" "$SFTP_PASS" > "$HOME/.netrc"
+          chmod 600 "$HOME/.netrc"
+
+          try_deploy() {  # $1 = protocol, $2 = port
+            mode="$1"; port="$2"
+            case "$mode" in
+              ftps) tls='set ftp:ssl-force yes; set ftp:ssl-protect-data yes; set ssl:verify-certificate no;' ;;
+              ftp)  tls='set ftp:ssl-allow no;' ;;
+              sftp) tls='set sftp:auto-confirm yes;' ;;
+            esac
+            echo "::group::Deploy attempt: $mode on port $port"
+            lftp -c "
+              set net:timeout 25;
+              set net:max-retries 2;
+              set mirror:parallel-transfer-count 2;
+              $tls
+              open $mode://$SFTP_HOST:$port;
+              cd $SFTP_DIR || cd .;
+              mirror -R --verbose --no-perms ./dist .;
+              put -O . ./dist/.htaccess;
+              bye
+            "
+            rc=$?
+            echo "::endgroup::"
+            return $rc
+          }
+
+          port_for() {  # FTP/FTPS default to 21, Hostinger SFTP (SSH) to 65002
+            if [ -n "$SFTP_PORT" ]; then echo "$SFTP_PORT"
+            elif [ "$1" = "sftp" ]; then echo 65002
+            else echo 21
+            fi
+          }
+
+          deployed=0
+          for mode in ftps ftp sftp; do
+            if [ -n "$FORCE_PROTOCOL" ] && [ "$FORCE_PROTOCOL" != "$mode" ]; then
+              echo "Skipping $mode because HOSTINGER_PROTOCOL=$FORCE_PROTOCOL"
+              continue
+            fi
+            p=$(port_for "$mode")
+            if try_deploy "$mode" "$p"; then
+              echo "::notice title=Deployed::dist/ uploaded via $mode on port $p"
+              deployed=1
+              break
+            fi
+            echo "::warning::$mode on port $p did not work, trying the next option"
+          done
+
+          if [ "$deployed" -ne 1 ]; then
+            echo "::error::Deployment failed. Check HOSTINGER_SFTP_HOST / HOSTINGER_SFTP_USER / HOSTINGER_SFTP_PASSWORD, or pin the working method with the repository variable HOSTINGER_PROTOCOL = ftps | ftp | sftp"
+            exit 1
+          fi
 
       - name: Done
         run: echo "::notice title=Deployed::Commit ${{ github.sha }} is live at https://iq-motors.co.uk"
