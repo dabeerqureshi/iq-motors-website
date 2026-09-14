@@ -89,9 +89,10 @@ jobs:
       # characters never has to be escaped inside a shell/lftp string.
       # We try FTPS, then plain FTP, then SFTP and use the first that works,
       # because Hostinger supports all three depending on the account type.
-      # After connecting we auto-detect the web root: the FTP account may or
-      # may not already be rooted inside public_html, so `cd $REMOTE || cd .`
-      # lands in the right place either way.
+      # After connecting we probe for the web root: the FTP account may be
+      # rooted at the account home (public_html is then a sub-folder) or
+      # directly at public_html, so we test `cd $SFTP_DIR` first and fall back
+      # to the login directory.
       #
       # Pin one method with the repo variable HOSTINGER_PROTOCOL (ftps|ftp|sftp).
       - name: Install lftp
@@ -125,14 +126,25 @@ jobs:
               ftp)  tls='set ftp:ssl-allow no;' ;;
               sftp) tls='set sftp:auto-confirm yes;' ;;
             esac
+            # cmd:fail-exit makes lftp return a non-zero status when any command
+            # fails, so a broken upload can never be reported as a success.
+            common="set net:timeout 25; set net:max-retries 2; set cmd:fail-exit yes; $tls"
+
             echo "::group::Deploy attempt: $mode on port $port"
+
+            # Probe whether $SFTP_DIR exists for this account; if not, the login
+            # directory itself is the web root.
+            if lftp -c "$common open $mode://$SFTP_HOST:$port; cd $SFTP_DIR; bye" >/dev/null 2>&1; then
+              remote_dir="$SFTP_DIR"
+            else
+              remote_dir="."
+            fi
+
             lftp -c "
-              set net:timeout 25;
-              set net:max-retries 2;
-              set mirror:parallel-transfer-count 2;
-              $tls
+              $common
               open $mode://$SFTP_HOST:$port;
-              cd $SFTP_DIR || cd .;
+              cd $remote_dir;
+              set mirror:parallel-transfer-count 2;
               mirror -R --verbose --no-perms ./dist .;
               put -O . ./dist/.htaccess;
               bye
