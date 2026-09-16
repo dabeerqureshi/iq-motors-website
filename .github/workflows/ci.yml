@@ -1,0 +1,77 @@
+name: CI
+
+# Vercel owns building and deploying this site (see vercel.json), so CI only
+# needs to prove that a commit is safe to merge: lint, typecheck and a real
+# production build. No deploy step and no FTP credentials live here any more.
+#
+# Runs on every pull request and on pushes to main, so a broken commit is
+# caught before Vercel even starts building it.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel an in-flight run when the same branch is pushed again.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  verify:
+    name: Lint, typecheck & build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Production values live in the Vercel dashboard. Here we fall back to
+      # placeholders so forks and PRs can still build without secrets - the
+      # bundle produced in CI is never deployed.
+      - name: Build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://placeholder.supabase.co' }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || 'placeholder-anon-key' }}
+          VITE_SERVICE_ID_EMAILJS: ${{ secrets.EMAILJS_SERVICE_ID || 'service_placeholder' }}
+          VITE_PUBLIC_KEY_EMAILJS: ${{ secrets.EMAILJS_PUBLIC_KEY || 'placeholder-public-key' }}
+          VITE_TEMPLATE_ID_EMAILJS: ${{ secrets.EMAILJS_TEMPLATE_ID || 'template_placeholder' }}
+        run: npm run build
+
+      - name: Check build output
+        run: |
+          for file in dist/index.html dist/robots.txt dist/sitemap.xml; do
+            if [ ! -f "$file" ]; then
+              echo "::error::Expected build artifact is missing: $file"
+              exit 1
+            fi
+          done
+          if [ -f dist/.htaccess ]; then
+            echo "::error::dist/.htaccess found. Apache rewrites are not used on Vercel - remove it from public/."
+            exit 1
+          fi
+          echo "Build artefacts:"
+          find dist -type f | sort
+          du -sh dist

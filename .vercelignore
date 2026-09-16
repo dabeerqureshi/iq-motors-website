@@ -1,0 +1,31 @@
+# ---------------------------------------------------------------------------
+# Files that are never needed to build or serve the site.
+#
+# NOTE: only ever add files here that Vercel does NOT need at build time.
+# Everything the build reads (vite.config.ts, tsconfig*.json, tailwind.config.ts,
+# postcss.config.js, index.html, src/, public/, package*.json) must be uploaded,
+# so it must NOT appear in this file.
+# ---------------------------------------------------------------------------
+
+# Secrets & local environment (never ship these)
+.env
+.env.*
+!.env.example
+
+# VCS, CI and editor folders
+.git
+.github
+.vscode
+.idea
+
+# Local-only build output, caches and logs
+node_modules
+dist
+dist-ssr
+*.tsbuildinfo
+*.log
+
+# Documentation and database scripts are not part of the deployed site
+README.md
+sql
+*.docx

@@ -19,4 +19,14 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    // Keep third-party code (React, Radix, Supabase, EmailJS, ...) in one
+    // long-lived "vendor" chunk so a routine content-only deploy only forces
+    // visitors to re-download the small app chunk instead of the whole bundle.
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => (id.includes("node_modules") ? "vendor" : null),
+      },
+    },
+  },
 }));

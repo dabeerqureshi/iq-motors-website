@@ -1,7 +1,11 @@
 # IQ Motors Limited — Website
 
-![Build & Deploy](https://github.com/dabeerqureshi/iq-motors-website/actions/workflows/deploy.yml/badge.svg)
-![Keep Supabase Awake](https://github.com/dabeerqureshi/iq-motors-website/actions/workflows/keep-supabase-alive.yml/badge.svg)
+[![CI](https://github.com/dabeerqureshi/iq-motors-website/actions/workflows/ci.yml/badge.svg)](https://github.com/dabeerqureshi/iq-motors-website/actions/workflows/ci.yml)
+[![Keep Supabase Awake](https://github.com/dabeerqureshi/iq-motors-website/actions/workflows/keep-supabase-alive.yml/badge.svg)](https://github.com/dabeerqureshi/iq-motors-website/actions/workflows/keep-supabase-alive.yml)
+
+**Live site:** https://iq-motors.co.uk — static SPA built by **Vercel** (auto-deployed
+from `main`), domain from **Hostinger**, data/auth on **Supabase**, contact-form
+email through **EmailJS**.
 
 Professional Mercedes-Benz dealership website (React 18 + Vite + TypeScript +
 Tailwind CSS + shadcn-style UI), backed by Supabase.
@@ -27,10 +31,13 @@ Other scripts:
 
 ```bash
 npm run build      # production build into dist/
-npm run preview    # preview the production build
+npm run preview    # serve the production build locally
 npm run lint       # eslint
-npx tsc -b --noEmit  # type check
+npm run typecheck  # type check (tsc -b, project references)
 ```
+
+Node **22 LTS** is required (pinned in `package.json` → `engines` and `.nvmrc`, and
+in Vercel's build image).
 
 ## 🔑 Environment variables (`.env`)
 
@@ -42,8 +49,10 @@ npx tsc -b --noEmit  # type check
 | `VITE_PUBLIC_KEY_EMAILJS` | EmailJS public key |
 | `VITE_TEMPLATE_ID_EMAILJS` | EmailJS template id |
 
-> ⚠️ `.env` is git-ignored. Deployments (Netlify/Vercel) need these same
-> variables set in their dashboard.
+> ⚠️ `.env` is git-ignored (and kept out of deploys by `.vercelignore`). The same
+> variables must be set in **Vercel → Project → Settings → Environment Variables**
+> for *Production*, *Preview* and *Development*. Vite inlines them at build time,
+> so changing one only takes effect after the next deployment.
 
 ## 🗄 Supabase setup
 
@@ -65,51 +74,121 @@ Expected tables (created via the app/Supabase):
 - `happy_customers(id, image_url, created_at)`
 - `admin_users(id, email, last_login, created_at)`
 
-## ☁ Deploy
+## ☁️ Deploy — Vercel (hosting) + Hostinger (domain)
 
-The site is a static build — any host that serves `dist/` works.
+The site is a **static SPA build** (`dist/`). It is hosted on Vercel's global CDN;
+the domain stays registered at Hostinger. Vercel deploys it automatically on every
+push to `main`.
 
-**Netlify:** Build command `npm run build`, publish directory `dist`, add the
-env vars above.
+| Piece | Where | Cost |
+|---|---|---|
+| Website hosting, CDN, SSL, CI/CD | **Vercel** (Hobby plan) | £0 |
+| Domain + DNS records | **Hostinger** (already owned) | already paid |
+| Database, auth, image storage | **Supabase** (free tier) | £0 |
+| Contact-form email | **EmailJS** (free tier) | £0 |
+| Source code + quality gate | **GitHub** + GitHub Actions | £0 |
 
-**Vercel:** Framework preset *Vite*, build `npm run build`, output `dist`, add
-the env vars above.
+### How a deploy works
 
-### GitHub Actions → Hostinger (automatic)
+```
+push / merge to main
+        │
+        ▼
+Vercel detects the commit ──► npm ci ─► npm run build ──► dist/ ──► global CDN
+        │                                                              │
+        └────────────► https://iq-motors.co.uk  ◄──────────────────────┘
+```
 
-Simple pipeline (`.github/workflows/deploy.yml`): **every push to `main` builds
-the site and uploads `dist/` to Hostinger.** Nothing else runs in CI.
+Every branch and pull request also gets its own **Preview Deployment** URL, so
+changes can be checked on a real URL before they reach production.
 
-The deploy step installs `lftp` and tries **FTPS → FTP → SFTP** in order, using
-the first method that connects, then auto-detects the web root (so it works
-whether the FTP account is rooted at the account root or already inside
-`public_html`). Credentials are written to `~/.netrc`, so passwords containing
-special characters need no escaping.
+### One-time setup
 
-**Required GitHub Actions secrets** (repo → Settings → Secrets and variables →
-Actions → New repository secret):
+1. **Import the repository** — vercel.com → *Add New… → Project* → import
+   `dabeerqureshi/iq-motors-website`. The repo ships [`vercel.json`](vercel.json),
+   which already sets the framework preset (*Vite*), the `npm ci` install command,
+   `npm run build` build command, `dist` output directory, SPA rewrites, caching and
+   security headers — accept the detected defaults and press **Deploy**.
 
-| Secret name | Value |
+2. **Add the environment variables** — *Project → Settings → Environment
+   Variables*, added for **Production**, **Preview** *and* **Development**:
+
+   | Name | Value |
+   |---|---|
+   | `VITE_SUPABASE_URL` | `https://<project-ref>.supabase.co` |
+   | `VITE_SUPABASE_ANON_KEY` | Supabase anon key |
+   | `VITE_SERVICE_ID_EMAILJS` | EmailJS service id |
+   | `VITE_PUBLIC_KEY_EMAILJS` | EmailJS public key |
+   | `VITE_TEMPLATE_ID_EMAILJS` | EmailJS template id |
+
+   After editing any of them, use **Deployments → ⋯ → Redeploy**, because Vite
+   inlines these values into the bundle at build time.
+
+3. **Node version** — pinned to Node **22.x** via `package.json` → `engines` (and
+   `.nvmrc`), so the Vercel build image matches local development and CI. No
+   dashboard change needed.
+
+4. **Connect the Hostinger domain** — *Project → Settings → Domains → Add*, then add
+   **both** `iq-motors.co.uk` and `www.iq-motors.co.uk` and pick one as primary (the
+   other 308-redirects to it). Vercel then displays the exact DNS records to create;
+   add those in hPanel → *Domains → DNS / Nameservers*:
+
+   | Type | Name / Host | Value | Notes |
+   |---|---|---|---|
+   | `A` | `@` (apex / blank) | `216.198.79.1` | Vercel's current recommended apex IP. Use **the value Vercel shows you** — older projects may show `76.76.21.21`, which is also valid. |
+   | `CNAME` | `www` | `cname.vercel-dns.com` | Use the exact target Vercel shows for your project. |
+
+   - ⚠️ **Keep Hostinger's nameservers.** Only add/edit the A + CNAME records. Moving
+     the domain to Vercel's nameservers takes the **MX records with it** and mailboxes
+     such as `info@iqmotors.co.uk` would stop receiving mail.
+   - ⚠️ Remove any Hostinger *parking*/redirection record on the apex — two competing
+     `A` records make the domain resolve unpredictably.
+   - ⚠️ Leave MX, SPF/DKIM TXT and other records untouched.
+   - HTTPS certificates are issued and renewed automatically once the records verify
+     (often minutes; DNS propagation can take longer).
+
+5. **Protect `main`** (recommended) — GitHub → *Settings → Branches* → add a rule for
+   `main` that requires the **CI / Lint, typecheck & build** check before merging.
+
+### What `vercel.json` configures
+
+| Setting | Why |
 |---|---|
-| `SUPABASE_URL` | Your Supabase project URL |
-| `SUPABASE_ANON_KEY` | Your Supabase anon key |
-| `EMAILJS_SERVICE_ID` | EmailJS service ID |
-| `EMAILJS_PUBLIC_KEY` | EmailJS public key |
-| `EMAILJS_TEMPLATE_ID` | EmailJS template ID |
-| `HOSTINGER_SFTP_HOST` | FTP/SFTP hostname (hPanel → Files → FTP Accounts) |
-| `HOSTINGER_SFTP_USER` | FTP/SFTP username |
-| `HOSTINGER_SFTP_PASSWORD` | FTP/SFTP password |
-| `HOSTINGER_SFTP_PORT` | *optional* — FTP/FTPS `21`, SFTP `65002` |
-| `HOSTINGER_REMOTE_BASE` | *optional* — default `/public_html` |
+| `rewrites: /(.*) → /index.html` | **SPA routing.** Refreshing or sharing a deep link (`/stock`, `/car/123`, `/admin-IQmotors`, `/contact`) serves the app instead of a 404. Vercel checks the filesystem *before* rewrites, so real files are still served normally. |
+| `Cache-Control` on `/assets/*` and `/lovable-uploads/*` | Content-hashed bundles and brand images are `public, max-age=31536000, immutable`, so repeat visits are served from the browser cache. |
+| `Cache-Control` on `/index.html` | `max-age=0, must-revalidate` — the HTML shell is always revalidated, so a new deploy is live immediately. |
+| Security headers | `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`. |
+| HTTPS, HSTS, HTTP→HTTPS redirect | Handled by Vercel automatically for custom domains — nothing to configure. |
+| `.vercelignore` | Keeps `.env*`, `.github/`, `sql/`, docs and local build output out of a CLI deploy. Never add build **inputs** (configs, `src/`, `public/`) to it. |
 
-*Optional repository **variable*** (Settings → Secrets and variables → Actions →
-**Variables** tab) `HOSTINGER_PROTOCOL` = `ftps` \| `ftp` \| `sftp` pins a single
-transfer method if the automatic fallback picks the wrong one.
+The bundle is also split so that `vendor` (React, Radix, Supabase, EmailJS…) is
+cached separately from the app chunk — see the `manualChunks` option in
+[`vite.config.ts`](vite.config.ts).
 
-The build also ships [`public/.htaccess`](public/.htaccess) (Vite copies it into
-`dist/`), which adds SPA rewrites so deep links such as `/stock` or
-`/admin-IQmotors` survive a hard refresh on Apache, plus long-term caching for
-the hashed asset files.
+> The old Apache `public/.htaccess` (SPA rewrites for shared hosting) has been
+> removed — `vercel.json` replaces it. It remains in git history
+> (`git log -- public/.htaccess`) in case the site ever moves back to Apache hosting.
+
+### Day-to-day: previews, rollbacks, manual deploys
+
+- **Preview URL per PR** — Vercel comments the deployment URL on the pull request.
+- **Rollback** — *Deployments* tab → choose a good build → **Promote to Production**
+  (instant, no rebuild).
+- **CLI** — `npm i -g vercel`, then `vercel` (preview) or `vercel --prod`.
+- **Optional hardening** — *Settings → Deployment Protection → Vercel
+  Authentication* can make preview URLs private (production stays public); useful
+  because preview builds include the same `/admin-IQmotors` route.
+- **Hostinger deploy removed** — `.github/workflows/deploy.yml` and its FTP upload
+  step are gone. Once Vercel is live you can delete the `HOSTINGER_*` Action secrets
+  and revoke the FTP account in hPanel.
+
+### CI (GitHub Actions)
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every pull request and
+push to `main`: `npm ci` → `npm run lint` → `npm run typecheck` → `npm run build`,
+then asserts `dist/index.html`, `dist/robots.txt` and `dist/sitemap.xml` exist.
+Vercel does the deploying; CI only guards quality, so a broken commit cannot reach
+production unnoticed.
 
 ## ♻ Keep the Supabase project awake
 
@@ -134,3 +213,19 @@ pings the API weekly. To use it, add these **Actions secrets**:
 | `/about` | About IQ Motors |
 | `/car/:id` | Vehicle detail |
 | `/admin-IQmotors` | Admin dashboard |
+
+Every path above is also handled by the SPA rewrite in `vercel.json`, so it can be
+opened directly or refreshed without a 404.
+
+## 🩺 Troubleshooting (Vercel)
+
+| Symptom | Cause / fix |
+|---|---|
+| Deep link or refresh shows Vercel's 404 page | `vercel.json` rewrite missing or not committed — confirm the `rewrites` block is present and that the deployment was built after it landed. |
+| Site loads but stock is empty / admin cannot log in | Env vars missing on Vercel (or added only to *Production*). Add them for all environments and redeploy. |
+| Contact form fails | EmailJS ids wrong, or the domain is not allowed in the EmailJS dashboard (add `iq-motors.co.uk` + the `*.vercel.app` preview domains to the allowed origins). |
+| Env var change has no effect | `VITE_*` values are baked in at build time — trigger **Redeploy**. |
+| Domain still shows the old site | Hostinger DNS records are still pointing at the old host; check that the apex `A` record is Vercel's IP and the old parking record is deleted (`nslookup iq-motors.co.uk`). |
+| Domain shows "Invalid Configuration" in Vercel | The `A`/`CNAME` values do not match what Vercel shows, or extra records exist on the same hostname. |
+| Emails to `info@iqmotors.co.uk` stop arriving | Nameservers were moved to Vercel; move them back to Hostinger and re-add the MX/SPF/DKIM records. |
+| Build fails with `EBADENGINE` / wrong Node | Node is pinned to `22.x` in `package.json`; make sure the Vercel project's *Node.js Version* is not overridden to a deprecated major. |
