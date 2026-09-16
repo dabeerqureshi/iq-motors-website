@@ -11,13 +11,13 @@ jobs:
   keep-alive:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Supabase REST API
+            - name: Ping Supabase REST API
         run: |
           # A lightweight read-only query that keeps the project from pausing.
           curl -fsS --max-time 30 \
-            "${{ secrets.SUPABASE_URL }}/rest/v1/stock_list?select=id&limit=1" \
-            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            "${{ secrets.VITE_SUPABASE_URL }}/rest/v1/stock_list?select=id&limit=1" \
+            -H "apikey: ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
             -o /dev/null
 
       - name: Report status
