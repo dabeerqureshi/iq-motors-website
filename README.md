@@ -3,9 +3,9 @@
 [![CI](https://github.com/dabeerqureshi/iq-motors-website/actions/workflows/ci.yml/badge.svg)](https://github.com/dabeerqureshi/iq-motors-website/actions/workflows/ci.yml)
 [![Keep Supabase Awake](https://github.com/dabeerqureshi/iq-motors-website/actions/workflows/keep-supabase-alive.yml/badge.svg)](https://github.com/dabeerqureshi/iq-motors-website/actions/workflows/keep-supabase-alive.yml)
 
-**Live site:** https://iq-motors.co.uk — static SPA built by **Vercel** (auto-deployed
-from `main`), domain from **Hostinger**, data/auth on **Supabase**, contact-form
-email through **EmailJS**.
+**Live site:** https://www.iqmotorslimited.com — static SPA built by **Vercel**
+(auto-deployed from `main`), domain `iqmotorslimited.com` registered at
+**Hostinger**, data/auth on **Supabase**, contact-form email through **EmailJS**.
 
 Professional Mercedes-Benz dealership website (React 18 + Vite + TypeScript +
 Tailwind CSS + shadcn-style UI), backed by Supabase.
@@ -96,7 +96,7 @@ push / merge to main
         ▼
 Vercel detects the commit ──► npm ci ─► npm run build ──► dist/ ──► global CDN
         │                                                              │
-        └────────────► https://iq-motors.co.uk  ◄──────────────────────┘
+        └────────────► https://www.iqmotorslimited.com ◄───────────────
 ```
 
 Every branch and pull request also gets its own **Preview Deployment** URL, so
@@ -129,23 +129,39 @@ changes can be checked on a real URL before they reach production.
    dashboard change needed.
 
 4. **Connect the Hostinger domain** — *Project → Settings → Domains → Add*, then add
-   **both** `iq-motors.co.uk` and `www.iq-motors.co.uk` and pick one as primary (the
-   other 308-redirects to it). Vercel then displays the exact DNS records to create;
-   add those in hPanel → *Domains → DNS / Nameservers*:
+   both `iqmotorslimited.com` (apex) and `www.iqmotorslimited.com`, with **`www` as the
+   primary** — the apex 308-redirects to `www`, which is the host used in `index.html`,
+   `public/sitemap.xml` and `public/robots.txt`. Then point Hostinger at Vercel with
+   **one** of these two options:
 
-   | Type | Name / Host | Value | Notes |
-   |---|---|---|---|
-   | `A` | `@` (apex / blank) | `216.198.79.1` | Vercel's current recommended apex IP. Use **the value Vercel shows you** — older projects may show `76.76.21.21`, which is also valid. |
-   | `CNAME` | `www` | `cname.vercel-dns.com` | Use the exact target Vercel shows for your project. |
+   **Option A — let Vercel manage DNS** (simplest; use when the domain has no mailbox).
+   hPanel → *Domains → iqmotorslimited.com → Nameservers → Change Nameservers* → custom
+   nameservers `ns1.vercel-dns.com` and `ns2.vercel-dns.com`. Vercel's zone already
+   holds `ALIAS @ → cname.vercel-dns-017.com` plus CAA records, and manages `www` for
+   the project automatically — nothing else needs adding. Before switching, run
+   `nslookup -type=MX iqmotorslimited.com`: if it returns records (mail in use), copy
+   them into *Vercel → Domains → DNS Records* first, and disable DNSSEC if it is on.
 
-   - ⚠️ **Keep Hostinger's nameservers.** Only add/edit the A + CNAME records. Moving
-     the domain to Vercel's nameservers takes the **MX records with it** and mailboxes
-     such as `info@iqmotors.co.uk` would stop receiving mail.
-   - ⚠️ Remove any Hostinger *parking*/redirection record on the apex — two competing
-     `A` records make the domain resolve unpredictably.
-   - ⚠️ Leave MX, SPF/DKIM TXT and other records untouched.
-   - HTTPS certificates are issued and renewed automatically once the records verify
-     (often minutes; DNS propagation can take longer).
+   **Option B — keep Hostinger DNS** (edit exactly two records).
+   hPanel → *Domains → iqmotorslimited.com → DNS / Nameservers*:
+
+   | Action | Type | Name | Value | TTL |
+   |---|---|---|---|---|
+   | **edit** existing row | `A` | `@` | `216.198.79.1` — use the IP Vercel shows (legacy `76.76.21.21` also answers) | `300` |
+   | **edit** existing row | `CNAME` | `www` | `cname.vercel-dns-017.com` — use the target Vercel shows (generic legacy target `cname.vercel-dns.com`) | `300` |
+
+   - ⚠️ **Edit, don't add.** Change the existing `A @ 2.57.91.91` and
+     `CNAME www → iqmotorslimited.com` rows in place — a second `A` record on the apex
+     makes the domain resolve unpredictably.
+   - ⚠️ An `A` record needs an **IPv4 address** — a hostname is only valid in
+     the `CNAME`. Vercel's `ALIAS` type exists only inside Vercel DNS, so on Hostinger
+     the apex equivalent is `A → 216.198.79.1`.
+   - ⚠️ Keep the TTL inside Hostinger's 60–86400 range (`50` is rejected, `300`
+     is fine), leave MX/SPF/DKIM TXT alone, and don't use *Reset DNS records* (it puts
+     the parking records back).
+   - HTTPS certificates are issued automatically once the records verify
+     (minutes). Verify from your machine with `nslookup www.iqmotorslimited.com` — it
+     should resolve via `cname.vercel-dns-017.com` to `216.198.79.x`.
 
 5. **Protect `main`** (recommended) — GitHub → *Settings → Branches* → add a rule for
    `main` that requires the **CI / Lint, typecheck & build** check before merging.
@@ -223,9 +239,11 @@ opened directly or refreshed without a 404.
 |---|---|
 | Deep link or refresh shows Vercel's 404 page | `vercel.json` rewrite missing or not committed — confirm the `rewrites` block is present and that the deployment was built after it landed. |
 | Site loads but stock is empty / admin cannot log in | Env vars missing on Vercel (or added only to *Production*). Add them for all environments and redeploy. |
-| Contact form fails | EmailJS ids wrong, or the domain is not allowed in the EmailJS dashboard (add `iq-motors.co.uk` + the `*.vercel.app` preview domains to the allowed origins). |
+| Contact form fails | EmailJS ids wrong, or the origin is not allow-listed in the EmailJS dashboard (add `iqmotorslimited.com`, `www.iqmotorslimited.com` and the `*.vercel.app` preview domains). |
 | Env var change has no effect | `VITE_*` values are baked in at build time — trigger **Redeploy**. |
-| Domain still shows the old site | Hostinger DNS records are still pointing at the old host; check that the apex `A` record is Vercel's IP and the old parking record is deleted (`nslookup iq-motors.co.uk`). |
+| Domain still shows the Hostinger parking page | DNS still points at the parking IP `2.57.91.91`; run `nslookup iqmotorslimited.com` and replace the parking `A`/`www` records with Vercel's (or switch nameservers to `ns1/ns2.vercel-dns.com`). |
+| Site shows Vercel's `404: DEPLOYMENT_NOT_FOUND` | The hostname reaches Vercel but no Production deployment serves it yet — merge to `main`, check the *Deployments* tab, then confirm the domain card reads "Valid Configuration". |
 | Domain shows "Invalid Configuration" in Vercel | The `A`/`CNAME` values do not match what Vercel shows, or extra records exist on the same hostname. |
-| Emails to `info@iqmotors.co.uk` stop arriving | Nameservers were moved to Vercel; move them back to Hostinger and re-add the MX/SPF/DKIM records. |
+| `info@iqmotors.co.uk` bounces / no mailbox | `iq-motors.co.uk` does not exist (NXDOMAIN). Create a mailbox on `iqmotorslimited.com`, then update `src/pages/Contact.tsx` and the JSON-LD `email` in `index.html` (that one currently points at `iqmotors0@gmail.com`). |
+| Mail on `iqmotorslimited.com` breaks after moving DNS to Vercel | MX/SPF/DKIM records were not copied into *Vercel → Domains → DNS Records* before the nameserver switch. |
 | Build fails with `EBADENGINE` / wrong Node | Node is pinned to `22.x` in `package.json`; make sure the Vercel project's *Node.js Version* is not overridden to a deprecated major. |
