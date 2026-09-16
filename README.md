@@ -53,6 +53,15 @@ in Vercel's build image).
 > variables must be set in **Vercel → Project → Settings → Environment Variables**
 > for *Production*, *Preview* and *Development*. Vite inlines them at build time,
 > so changing one only takes effect after the next deployment.
+>
+> 🔒 **Everything with a `VITE_` prefix is public** — it is compiled into the
+> JavaScript bundle. Never put a secret here: no Supabase `service_role` key, no
+> database password, no private API key. The `anon` key is designed to be public
+> and is protected by Row Level Security ([`sql/enable_rls.sql`](sql/enable_rls.sql)).
+>
+> 🛑 The build **fails on Vercel when any of the five variables is missing**
+> (`vite.config.ts` → `REQUIRED_ENV`), so a misconfigured deploy can no longer go
+> live as a blank page. Locally it only warns, and CI supplies placeholders.
 
 ## 🗄 Supabase setup
 
@@ -237,6 +246,7 @@ opened directly or refreshed without a 404.
 
 | Symptom | Cause / fix |
 |---|---|
+| **Blank white page** | Open the browser console (F12). `supabaseUrl is required.`, or `[IQ Motors] Supabase is not configured`, means a `VITE_*` variable was missing at build time — add all five in *Vercel → Settings → Environment Variables* (Production **+** Preview **+** Development) and **Redeploy**, then hard-refresh (`Ctrl+Shift+R`). The repo also ships a blank-page guard and error boundary that render a readable message instead of white. |
 | Deep link or refresh shows Vercel's 404 page | `vercel.json` rewrite missing or not committed — confirm the `rewrites` block is present and that the deployment was built after it landed. |
 | Site loads but stock is empty / admin cannot log in | Env vars missing on Vercel (or added only to *Production*). Add them for all environments and redeploy. |
 | Contact form fails | EmailJS ids wrong, or the origin is not allow-listed in the EmailJS dashboard (add `iqmotorslimited.com`, `www.iqmotorslimited.com` and the `*.vercel.app` preview domains). |

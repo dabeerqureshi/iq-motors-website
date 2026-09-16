@@ -65,11 +65,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     );
 
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('Initial session check:', session?.user?.email);
-      checkAdmin(session);
-    });
+    // Check for existing session. If the client cannot be reached (for example a
+    // build that started without its VITE_SUPABASE_* variables) we still resolve
+    // the loading state, so the app is never stuck on a spinner.
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        checkAdmin(session);
+      })
+      .catch((error) => {
+        console.error('Initial session check failed:', error);
+        checkAdmin(null);
+      });
 
     return () => {
       mounted = false;
