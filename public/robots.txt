@@ -1,14 +1,7 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
-
+# Public site: crawl everything except the admin dashboard.
+# (Search engines, social-preview crawlers and everything else use this rule.)
 User-agent: *
 Allow: /
+Disallow: /admin-IQmotors
+
+Sitemap: https://iq-motors.co.uk/sitemap.xml
