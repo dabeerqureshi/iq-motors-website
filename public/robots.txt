@@ -4,4 +4,4 @@ User-agent: *
 Allow: /
 Disallow: /admin-IQmotors
 
-Sitemap: https://iq-motors.co.uk/sitemap.xml
+Sitemap: https://www.iqmotorslimited.com/sitemap.xml
