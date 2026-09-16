@@ -11,7 +11,7 @@ jobs:
   keep-alive:
     runs-on: ubuntu-latest
     steps:
-            - name: Ping Supabase REST API
+      - name: Ping Supabase REST API
         run: |
           # A lightweight read-only query that keeps the project from pausing.
           curl -fsS --max-time 30 \
