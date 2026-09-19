@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2, Plus, Search, Upload, X, Image as ImageIcon } from "lucide-react";
+import { Trash2, Plus, Pencil, Search, Upload, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -30,21 +30,87 @@ interface stock_list {
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_FILE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
 
+interface StockForm {
+  title: string;
+  price: string;
+  year: string;
+  miles_driven: string;
+  description: string;
+  attributes: string;
+  is_available: boolean;
+}
+
+const createEmptyForm = (): StockForm => ({
+  title: "",
+  price: "",
+  year: "",
+  miles_driven: "",
+  description: "",
+  attributes: "",
+  is_available: true,
+});
+
 const AdminStockManagement = () => {
   const [stockItems, setStockItems] = useState<stock_list[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [deleteLoadingId, setDeleteLoadingId] = useState<string | null>(null);
-  const [uploadLoading, setUploadLoading] = useState(false);
+  const [isFormDialogOpen, setIsFormDialogOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editingCar, setEditingCar] = useState<stock_list | null>(null);
+  const [existingImages, setExistingImages] = useState<string[]>([]);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [formData, setFormData] = useState({
-    title: "", price: "", year: "", miles_driven: "", description: "", attributes: "", is_available: true,
-  });
+  const [formData, setFormData] = useState<StockForm>(createEmptyForm);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+
+  const clearSelectedFiles = () => {
+    previewUrls.forEach(url => URL.revokeObjectURL(url));
+    setPreviewUrls([]);
+    setSelectedFiles([]);
+  };
+
+  const resetForm = () => {
+    setFormData(createEmptyForm());
+    clearSelectedFiles();
+    setExistingImages([]);
+    setEditingCar(null);
+  };
+
+  const handleFormDialogChange = (open: boolean) => {
+    setIsFormDialogOpen(open);
+    if (!open) resetForm();
+  };
+
+  const openAddDialog = () => {
+    resetForm();
+    setIsFormDialogOpen(true);
+  };
+
+  const openEditDialog = (car: stock_list) => {
+    setEditingCar(car);
+    setFormData({
+      title: car.title ?? "",
+      price: car.price != null ? String(car.price) : "",
+      year: car.year != null ? String(car.year) : "",
+      miles_driven:
+        car.miles_driven != null
+          ? String(car.miles_driven).replace(/[^\d]/g, "")
+          : "",
+      description: car.description ?? "",
+      attributes: (car.attributes ?? []).join(", "),
+      is_available: car.is_available,
+    });
+    setExistingImages(car.image_url ?? []);
+    clearSelectedFiles();
+    setIsFormDialogOpen(true);
+  };
+
+  const removeExistingImage = (url: string) => {
+    setExistingImages(prev => prev.filter(image => image !== url));
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -56,74 +122,91 @@ const AdminStockManagement = () => {
         variant: "destructive",
       });
     }
-    const newFiles = [...selectedFiles, ...valid];
-    setSelectedFiles(newFiles);
-    setPreviewUrls(prev => [...prev, ...valid.map(f => URL.createObjectURL(f))]);
+    const newPreviewUrls = valid.map(f => URL.createObjectURL(f));
+    setSelectedFiles(prev => [...prev, ...valid]);
+    setPreviewUrls(prev => [...prev, ...newPreviewUrls]);
+    // Allow picking the same file again in a later selection.
+    e.target.value = "";
   };
 
   const removePreview = (index: number) => {
-    const updated = [...previewUrls];
-    const removedUrl = updated[index];
-    updated.splice(index, 1);
-    setPreviewUrls(updated);
+    const removedUrl = previewUrls[index];
+    if (removedUrl) URL.revokeObjectURL(removedUrl);
+    setPreviewUrls(prev => prev.filter((_, i) => i !== index));
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
-    URL.revokeObjectURL(removedUrl);
   };
 
-  const handleSelectedFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFileSelect(e);
-  };
-
-  const uploadImages = async (): Promise<string[]> => {
-    setUploadLoading(true);
+  const uploadImages = async (files: File[]): Promise<string[]> => {
     const urls: string[] = [];
-    for (const file of selectedFiles) {
+    for (const file of files) {
       const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
       const path = 'car-images/' + Date.now() + '-' + Math.random().toString(36).slice(2) + '.' + ext;
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from('car-images')
         .upload(path, file, { contentType: file.type, upsert: false });
       if (error) {
-        toast({ title: 'Image upload failed', description: error.message, variant: 'destructive' });
-      } else {
-        const { data: pub } = supabase.storage.from('car-images').getPublicUrl(path);
-        urls.push(pub.publicUrl);
+        throw new Error(`Could not upload "${file.name}": ${error.message}`);
       }
+      const { data: pub } = supabase.storage.from('car-images').getPublicUrl(path);
+      urls.push(pub.publicUrl);
     }
-    setUploadLoading(false);
     return urls;
   };
 
-  const handleAddCar = async () => {
-    if (!formData.title || !formData.price || !formData.year) {
-      toast({ title: 'Missing fields', description: 'Title, price, and year are required', variant: 'destructive' });
+  const validateForm = (): string | null => {
+    if (!formData.title.trim()) return 'Make / Model is required';
+    const price = Number(formData.price);
+    if (!formData.price || !Number.isFinite(price) || price <= 0) return 'Enter a valid price';
+    const year = Number(formData.year);
+    const maxYear = new Date().getFullYear() + 1;
+    if (!formData.year || !Number.isInteger(year) || year < 1900 || year > maxYear)
+      return `Enter a valid year between 1900 and ${maxYear}`;
+    return null;
+  };
+
+  const handleSaveCar = async () => {
+    const validationError = validateForm();
+    if (validationError) {
+      toast({ title: 'Check the form', description: validationError, variant: 'destructive' });
       return;
     }
+
+    setIsSaving(true);
     try {
-      setUploadLoading(true);
-      const urls = await uploadImages();
-      const car = {
-        title: formData.title,
-        price: parseFloat(formData.price),
-        year: parseInt(formData.year, 10),
-        miles_driven: formData.miles_driven,
-        description: formData.description || null,
-        attributes: formData.attributes ? formData.attributes.split(',').map(s => s.trim()).filter(Boolean) : null,
+      const newImageUrls = await uploadImages(selectedFiles);
+      const payload = {
+        title: formData.title.trim(),
+        price: Number(formData.price),
+        year: Number(formData.year),
+        miles_driven: formData.miles_driven.replace(/,/g, '').trim(),
+        description: formData.description.trim() || null,
+        attributes: formData.attributes
+          ? formData.attributes.split(',').map(s => s.trim()).filter(Boolean)
+          : null,
         is_available: formData.is_available,
-        image_url: urls,
+        image_url: [...existingImages, ...newImageUrls],
       };
-      const { error } = await supabase.from('stock_list').insert([car]).select();
-      if (error) throw error;
-      toast({ title: 'Car added', description: formData.title + ' has been listed successfully', variant: 'default' });
-      setIsAddDialogOpen(false);
-      setFormData({ title: '', price: '', year: '', miles_driven: '', description: '', attributes: '', is_available: true });
-      setSelectedFiles([]);
-      setPreviewUrls([]);
+
+      if (editingCar) {
+        const { error } = await supabase.from('stock_list').update(payload).eq('id', editingCar.id);
+        if (error) throw error;
+        toast({ title: 'Vehicle updated', description: `${payload.title} has been updated successfully` });
+      } else {
+        const { error } = await supabase.from('stock_list').insert([payload]);
+        if (error) throw error;
+        toast({ title: 'Car added', description: `${payload.title} has been listed successfully` });
+      }
+
+      handleFormDialogChange(false);
       fetchStockItems();
     } catch (e) {
-      toast({ title: 'Add failed', description: (e as Error).message || 'Could not add car', variant: 'destructive' });
+      toast({
+        title: editingCar ? 'Update failed' : 'Add failed',
+        description: (e as Error).message || (editingCar ? 'Could not update vehicle' : 'Could not add car'),
+        variant: 'destructive',
+      });
     } finally {
-      setUploadLoading(false);
+      setIsSaving(false);
     }
   };
 
@@ -184,15 +267,28 @@ const AdminStockManagement = () => {
                   </Badge>
                 </TableCell>
                 <TableCell className='text-right'>
-                  <Button
-                    variant='destructive'
-                    size='sm'
-                    onClick={() => handleDeleteCar(car.id)}
-                    disabled={deleteLoadingId === car.id}
-                  >
-                    <Trash2 className='w-4 h-4 mr-1' />
-                    {deleteLoadingId === car.id ? 'Deleting...' : 'Delete'}
-                  </Button>
+                  <div className='flex justify-end gap-2'>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => openEditDialog(car)}
+                      disabled={deleteLoadingId === car.id}
+                      aria-label={`Edit ${car.title}`}
+                    >
+                      <Pencil className='w-4 h-4 mr-1' />
+                      Edit
+                    </Button>
+                    <Button
+                      variant='destructive'
+                      size='sm'
+                      onClick={() => handleDeleteCar(car.id)}
+                      disabled={deleteLoadingId === car.id}
+                      aria-label={`Delete ${car.title}`}
+                    >
+                      <Trash2 className='w-4 h-4 mr-1' />
+                      {deleteLoadingId === car.id ? 'Deleting...' : 'Delete'}
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -225,10 +321,23 @@ const AdminStockManagement = () => {
           </TabsContent>
         </Tabs>
 
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild><Button className='mt-4'>Add Vehicle</Button></DialogTrigger>
+        <Dialog open={isFormDialogOpen} onOpenChange={handleFormDialogChange}>
+          <DialogTrigger asChild>
+            <Button className='mt-4' onClick={openAddDialog}>
+              <Plus className='w-4 h-4 mr-2' /> Add Vehicle
+            </Button>
+          </DialogTrigger>
           <DialogContent className='bg-cardealer-surface text-cardealer-dark sm:max-w-2xl max-h-[90vh] overflow-y-auto'>
-            <DialogHeader><DialogTitle className='text-cardealer-dark'>Add New Vehicle</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle className='text-cardealer-dark'>
+                {editingCar ? 'Edit Vehicle' : 'Add New Vehicle'}
+              </DialogTitle>
+              <DialogDescription>
+                {editingCar
+                  ? 'Update the details below and save your changes. Current images are kept unless you remove them.'
+                  : 'Fill in the vehicle details and add images. Make / Model, Price and Year are required.'}
+              </DialogDescription>
+            </DialogHeader>
             <div className='grid gap-3 sm:grid-cols-2'>
               <div className='space-y-2'>
                 <Label htmlFor='title'>Make / Model</Label>
@@ -236,15 +345,15 @@ const AdminStockManagement = () => {
               </div>
               <div className='space-y-2'>
                 <Label htmlFor='price'>Price (£)</Label>
-                <Input id='price' type='number' placeholder='25000' value={formData.price} onChange={e => setFormData(prev => ({ ...prev, price: e.target.value }))} />
+                <Input id='price' type='number' min='0' placeholder='25000' value={formData.price} onChange={e => setFormData(prev => ({ ...prev, price: e.target.value }))} />
               </div>
               <div className='space-y-2'>
                 <Label htmlFor='year'>Year</Label>
-                <Input id='year' type='number' placeholder='2020' value={formData.year} onChange={e => setFormData(prev => ({ ...prev, year: e.target.value }))} />
+                <Input id='year' type='number' min='1900' placeholder='2020' value={formData.year} onChange={e => setFormData(prev => ({ ...prev, year: e.target.value }))} />
               </div>
               <div className='space-y-2'>
                 <Label htmlFor='miles'>Mileage</Label>
-                <Input id='miles' type='number' placeholder='15000' value={formData.miles_driven} onChange={e => setFormData(prev => ({ ...prev, miles_driven: e.target.value }))} />
+                <Input id='miles' type='number' min='0' placeholder='15000' value={formData.miles_driven} onChange={e => setFormData(prev => ({ ...prev, miles_driven: e.target.value }))} />
               </div>
               <div className='space-y-2 sm:col-span-2'>
                 <Label htmlFor='desc'>Description</Label>
@@ -256,40 +365,67 @@ const AdminStockManagement = () => {
               </div>
             </div>
 
-            <div className='mt-4 border-t pt-4'>
-              <Label htmlFor='files'>Vehicle Images</Label>
-              <p className='text-sm text-gray-500 mb-2'>Select JPEG/PNG/WebP, max 5MB each. Uploaded to your Supabase Storage (car-images bucket).</p>
-
-              {previewUrls.length > 0 && (
-                <div className='flex flex-wrap gap-3 mb-3'>
-                  {previewUrls.map((url, i) => (
-                    <div key={i} className='relative inline-block w-24 h-24 rounded overflow-hidden bg-gray-200'>
-                      <img src={url} alt={('preview ' + i) + ''} className='w-full h-full object-cover' />
-                      <button type='button' className='absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center' onClick={() => removePreview(i)} aria-label='Remove image'>
-                        <X className='w-3 h-3' />
-                      </button>
-                    </div>
-                  ))}
+            <div className='mt-4 border-t pt-4 space-y-3'>
+              {editingCar && existingImages.length > 0 && (
+                <div>
+                  <Label>Current images</Label>
+                  <p className='text-sm text-gray-500 mb-2'>
+                    Remove any images you no longer want on this listing.
+                  </p>
+                  <div className='flex flex-wrap gap-3'>
+                    {existingImages.map((url, index) => (
+                      <div key={`${index}-${url}`} className='relative inline-block w-24 h-24 rounded overflow-hidden bg-gray-200 border border-cardealer-secondary'>
+                        <img src={url} alt='Current vehicle' className='w-full h-full object-cover' />
+                        <button
+                          type='button'
+                          className='absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center'
+                          onClick={() => removeExistingImage(url)}
+                          aria-label='Remove current image'
+                        >
+                          <X className='w-3 h-3' />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
-              <div className='flex items-center gap-2'>
-                <Input
-                  id='files'
-                  type='file'
-                  accept='image/jpeg, image/png, image/webp' multiple
-                  className='hidden'
-                  ref={fileInputRef}
-                  onChange={handleSelectedFilesChange}
-                />
-                <Button variant='outline' id='add-images-btn' onClick={() => fileInputRef.current?.click()}>
-                  <Upload className='w-4 h-4 mr-2' /> Add Images
-                </Button>
+              <div>
+                <Label htmlFor='files'>{editingCar ? 'Add new images' : 'Vehicle Images'}</Label>
+                <p className='text-sm text-gray-500 mb-2'>Select JPEG/PNG/WebP, max 5MB each. Uploaded to your Supabase Storage (car-images bucket).</p>
+
                 {previewUrls.length > 0 && (
-                  <Button variant='ghost' id='clear-images-btn' onClick={() => { setPreviewUrls([]); setSelectedFiles([]); }}>
-                    <X className='w-4 h-4 mr-2' /> Clear
-                  </Button>
+                  <div className='flex flex-wrap gap-3 mb-3'>
+                    {previewUrls.map((url, i) => (
+                      <div key={url} className='relative inline-block w-24 h-24 rounded overflow-hidden bg-gray-200'>
+                        <img src={url} alt={`New image preview ${i + 1}`} className='w-full h-full object-cover' />
+                        <button type='button' className='absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center' onClick={() => removePreview(i)} aria-label='Remove image'>
+                          <X className='w-3 h-3' />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
+
+                <div className='flex items-center gap-2'>
+                  <Input
+                    id='files'
+                    type='file'
+                    accept='image/jpeg, image/png, image/webp'
+                    multiple
+                    className='hidden'
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                  />
+                  <Button type='button' variant='outline' id='add-images-btn' onClick={() => fileInputRef.current?.click()}>
+                    <Upload className='w-4 h-4 mr-2' /> Add Images
+                  </Button>
+                  {previewUrls.length > 0 && (
+                    <Button type='button' variant='ghost' id='clear-images-btn' onClick={clearSelectedFiles}>
+                      <X className='w-4 h-4 mr-2' /> Clear
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -299,9 +435,20 @@ const AdminStockManagement = () => {
             </div>
 
             <div className='flex justify-end gap-2 mt-5'>
-              <Button variant='outline' onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleAddCar} disabled={uploadLoading}>
-                {uploadLoading ? <span className='flex items-center gap-2'><span className='animate-pulse w-4 h-4 bg-gray-300 rounded-full' />Saving</span> : 'Add Vehicle'}
+              <Button variant='outline' onClick={() => handleFormDialogChange(false)} disabled={isSaving}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveCar} disabled={isSaving}>
+                {isSaving ? (
+                  <span className='flex items-center gap-2'>
+                    <span className='animate-pulse w-4 h-4 bg-gray-300 rounded-full' />
+                    Saving
+                  </span>
+                ) : editingCar ? (
+                  'Save Changes'
+                ) : (
+                  'Add Vehicle'
+                )}
               </Button>
             </div>
           </DialogContent>
