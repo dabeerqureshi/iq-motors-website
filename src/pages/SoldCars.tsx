@@ -3,9 +3,12 @@ import Footer from "@/components/Footer";
 import CarCard from "@/components/CarCard";
 import { useStockList } from "@/hooks/useStockList";
 import AnimatedSection from "@/components/AnimatedSection";
+import { useSeo, pageSeo } from "@/lib/seo";
 
 const SoldCars = () => {
   const { soldCars, soldLoading: loading, soldError: error } = useStockList();
+
+  useSeo(pageSeo("/sold"));
 
   return (
     <div className="min-h-screen flex flex-col">

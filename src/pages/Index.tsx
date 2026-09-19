@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { supabase } from "@/supabase/supabase";
 import AnimatedSection from "@/components/AnimatedSection";
+import { useSeo, pageSeo } from "@/lib/seo";
 
 const Index = () => {
   const [featuredCars, setFeaturedCars] = useState([]);
@@ -63,6 +64,12 @@ const Index = () => {
 
     fetchHomeData();
   }, []);
+
+  useSeo(
+    pageSeo("/", {
+      cars: featuredCars.map((car) => ({ id: car.id, title: car.title })),
+    })
+  );
 
   return (
     <div className="min-h-screen flex flex-col">

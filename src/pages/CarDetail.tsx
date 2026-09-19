@@ -20,6 +20,7 @@ import { Link } from "react-router-dom";
 import CarImageGallery from "@/components/CarImageGallery";
 import AnimatedSection from "@/components/AnimatedSection";
 import { supabase } from "@/supabase/supabase";
+import { useSeo, vehicleSeo, vehicleSchema } from "@/lib/seo";
 
 interface StockListItem {
   id: number;
@@ -105,9 +106,40 @@ const CarDetail = () => {
     } listed on your website.\n\nName:\nPhone:\nMessage:`
   );
 
-
-
-
+  // SEO: set per-vehicle title/description/schema when we have the car data
+  useSeo(
+    car
+      ? {
+          ...vehicleSeo({
+            id: car.id,
+            title: car.title,
+            year: car.year,
+            price: car.price,
+            mileage: car.mileage,
+          }),
+          image: car.imageUrl[0] ?? undefined,
+          schema: [
+            vehicleSchema({
+              id: car.id,
+              title: car.title,
+              year: car.year,
+              price: car.price,
+              mileage: car.mileage,
+              description: car.description || undefined,
+              images: car.imageUrl,
+              isSold: car.isSold ?? false,
+            }),
+          ],
+        }
+      : {
+          title: "Vehicle Not Found | IQ Motors",
+          description:
+            "The vehicle page you were looking for does not exist. Browse our used Mercedes-Benz stock at IQ Motors in Ealing.",
+          path: `/car/${id ?? ""}`,
+          noindex: true,
+          schema: [],
+        }
+  );
 
   if (loading) {
     return (

@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Search, RotateCcw, Car as CarIcon } from "lucide-react";
 import AnimatedSection from "@/components/AnimatedSection";
+import { useSeo, pageSeo } from "@/lib/seo";
 
 const StockList = () => {
   const { stockItems, loading, error } = useStockList();
@@ -39,6 +40,12 @@ const StockList = () => {
   } = useStockFiltering(allCars);
 
   const hasActiveFilters = searchTerm !== "" || priceSort !== "none";
+
+  useSeo(
+    pageSeo("/stock", {
+      cars: stockItems.map((car) => ({ id: car.id, title: car.title })),
+    })
+  );
 
   return (
     <div className="min-h-screen flex flex-col">

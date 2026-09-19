@@ -13,8 +13,15 @@ import {
   PhoneCall,
   Check,
 } from "lucide-react";
+import { useSeo, pageSeo, defaultBreadcrumb } from "@/lib/seo";
 
 const Servicing = () => {
+  useSeo(
+    pageSeo("/servicing", {
+      breadcrumb: defaultBreadcrumb("/servicing"),
+      cars: [],
+    })
+  );
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
