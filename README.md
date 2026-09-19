@@ -16,7 +16,7 @@ Tailwind CSS + shadcn-style UI), backed by Supabase.
 - Full vehicle detail pages (gallery carousel, specs, price, quick-contact)
 - Sold cars, happy customers, finance and servicing pages
 - Contact form powered by EmailJS
-- Admin dashboard (`/admin-IQmotors`) with stock + happy-customer management
+- Admin dashboard (`/admin-IQmotors`) with full stock-list management — add, **edit** and delete vehicle listings (with image uploads) — plus happy-customer management
 - Scroll-reveal animations that respect `prefers-reduced-motion`
 
 ## 🚀 Local development
