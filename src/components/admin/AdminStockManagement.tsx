@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2, Plus, Pencil, Search, Upload, X } from "lucide-react";
+import { Trash2, Plus, Pencil, Search, Upload, X, Tag, RotateCcw } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -55,6 +55,7 @@ const AdminStockManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [deleteLoadingId, setDeleteLoadingId] = useState<string | null>(null);
+  const [movingId, setMovingId] = useState<string | null>(null);
   const [isFormDialogOpen, setIsFormDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingCar, setEditingCar] = useState<stock_list | null>(null);
@@ -241,6 +242,33 @@ const AdminStockManagement = () => {
     }
   };
 
+  const handleMoveCar = async (car: stock_list) => {
+    const toSold = car.is_available;
+    setMovingId(car.id);
+    try {
+      const { error } = await supabase
+        .from('stock_list')
+        .update({ is_available: !car.is_available })
+        .eq('id', car.id);
+      if (error) throw error;
+      toast({
+        title: toSold ? 'Moved to Sold' : 'Moved to Available',
+        description: toSold
+          ? `${car.title} has been moved to the Sold list`
+          : `${car.title} is now listed as available`,
+      });
+      fetchStockItems();
+    } catch (e) {
+      toast({
+        title: toSold ? 'Move failed' : 'Restore failed',
+        description: (e as Error).message || 'Could not update the vehicle',
+        variant: 'destructive',
+      });
+    } finally {
+      setMovingId(null);
+    }
+  };
+
   const availableCars = stockItems.filter(c => c.is_available && (!searchTerm || c.title.toLowerCase().includes(searchTerm.toLowerCase())));
   const soldCars = stockItems.filter(c => !c.is_available && (!searchTerm || c.title.toLowerCase().includes(searchTerm.toLowerCase())));
 
@@ -268,11 +296,34 @@ const AdminStockManagement = () => {
                 </TableCell>
                 <TableCell className='text-right'>
                   <div className='flex justify-end gap-2'>
+                    {car.is_available ? (
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        onClick={() => handleMoveCar(car)}
+                        disabled={movingId === car.id || deleteLoadingId === car.id}
+                        aria-label={`Mark ${car.title} as sold`}
+                      >
+                        <Tag className='w-4 h-4 mr-1' />
+                        {movingId === car.id ? 'Moving...' : 'Mark Sold'}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        onClick={() => handleMoveCar(car)}
+                        disabled={movingId === car.id || deleteLoadingId === car.id}
+                        aria-label={`Move ${car.title} back to available`}
+                      >
+                        <RotateCcw className='w-4 h-4 mr-1' />
+                        {movingId === car.id ? 'Moving...' : 'Back to Available'}
+                      </Button>
+                    )}
                     <Button
                       variant='outline'
                       size='sm'
                       onClick={() => openEditDialog(car)}
-                      disabled={deleteLoadingId === car.id}
+                      disabled={movingId === car.id || deleteLoadingId === car.id}
                       aria-label={`Edit ${car.title}`}
                     >
                       <Pencil className='w-4 h-4 mr-1' />
@@ -282,7 +333,7 @@ const AdminStockManagement = () => {
                       variant='destructive'
                       size='sm'
                       onClick={() => handleDeleteCar(car.id)}
-                      disabled={deleteLoadingId === car.id}
+                      disabled={movingId === car.id || deleteLoadingId === car.id}
                       aria-label={`Delete ${car.title}`}
                     >
                       <Trash2 className='w-4 h-4 mr-1' />
