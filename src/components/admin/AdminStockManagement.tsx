@@ -278,74 +278,101 @@ const AdminStockManagement = () => {
     if (cars.length === 0)
       return (  <p className='text-center text-gray-500 py-10'>{showAvail ? 'No available cars' : 'No sold cars'}</p>);
 
-    return (
-      <div className='overflow-x-auto'>
-        <Table>
-          <TableHeader><TableRow><TableHead>Make / Model</TableHead><TableHead>Price</TableHead><TableHead>Year</TableHead><TableHead>Mileage</TableHead><TableHead>Available</TableHead><TableHead className='text-right'>Actions</TableHead></TableRow></TableHeader>
-          <TableBody>
-            {cars.map(car => (
-              <TableRow key={car.id}>
-                <TableCell className='font-medium'>{car.title}</TableCell>
-                <TableCell>£{Number(car.price).toLocaleString('en-GB')}</TableCell>
-                <TableCell>{car.year}</TableCell>
-                <TableCell>{car.miles_driven} miles</TableCell>
-                <TableCell>
-                  <Badge variant={car.is_available ? 'default' : 'secondary'}>
-                    {car.is_available ? 'Available' : 'Sold'}
-                  </Badge>
-                </TableCell>
-                <TableCell className='text-right'>
-                  <div className='flex justify-end gap-2'>
-                    {car.is_available ? (
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() => handleMoveCar(car)}
-                        disabled={movingId === car.id || deleteLoadingId === car.id}
-                        aria-label={`Mark ${car.title} as sold`}
-                      >
-                        <Tag className='w-4 h-4 mr-1' />
-                        {movingId === car.id ? 'Moving...' : 'Mark Sold'}
-                      </Button>
-                    ) : (
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() => handleMoveCar(car)}
-                        disabled={movingId === car.id || deleteLoadingId === car.id}
-                        aria-label={`Move ${car.title} back to available`}
-                      >
-                        <RotateCcw className='w-4 h-4 mr-1' />
-                        {movingId === car.id ? 'Moving...' : 'Back to Available'}
-                      </Button>
-                    )}
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      onClick={() => openEditDialog(car)}
-                      disabled={movingId === car.id || deleteLoadingId === car.id}
-                      aria-label={`Edit ${car.title}`}
-                    >
-                      <Pencil className='w-4 h-4 mr-1' />
-                      Edit
-                    </Button>
-                    <Button
-                      variant='destructive'
-                      size='sm'
-                      onClick={() => handleDeleteCar(car.id)}
-                      disabled={movingId === car.id || deleteLoadingId === car.id}
-                      aria-label={`Delete ${car.title}`}
-                    >
-                      <Trash2 className='w-4 h-4 mr-1' />
-                      {deleteLoadingId === car.id ? 'Deleting...' : 'Delete'}
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+    const renderActions = (car: stock_list) => (
+      <div className='flex flex-wrap justify-end gap-2'>
+        {car.is_available ? (
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={() => handleMoveCar(car)}
+            disabled={movingId === car.id || deleteLoadingId === car.id}
+            aria-label={`Mark ${car.title} as sold`}
+          >
+            <Tag className='w-4 h-4 mr-1' />
+            {movingId === car.id ? 'Moving...' : 'Mark Sold'}
+          </Button>
+        ) : (
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={() => handleMoveCar(car)}
+            disabled={movingId === car.id || deleteLoadingId === car.id}
+            aria-label={`Move ${car.title} back to available`}
+          >
+            <RotateCcw className='w-4 h-4 mr-1' />
+            {movingId === car.id ? 'Moving...' : 'Back to Available'}
+          </Button>
+        )}
+        <Button
+          variant='outline'
+          size='sm'
+          onClick={() => openEditDialog(car)}
+          disabled={movingId === car.id || deleteLoadingId === car.id}
+          aria-label={`Edit ${car.title}`}
+        >
+          <Pencil className='w-4 h-4 mr-1' />
+          Edit
+        </Button>
+        <Button
+          variant='destructive'
+          size='sm'
+          onClick={() => handleDeleteCar(car.id)}
+          disabled={movingId === car.id || deleteLoadingId === car.id}
+          aria-label={`Delete ${car.title}`}
+        >
+          <Trash2 className='w-4 h-4 mr-1' />
+          {deleteLoadingId === car.id ? 'Deleting...' : 'Delete'}
+        </Button>
       </div>
+    );
+
+    return (
+      <>
+        {/* Mobile: card list (tables don't fit narrow screens) */}
+        <div className='md:hidden space-y-3'>
+          {cars.map(car => (
+            <div key={car.id} className='rounded-lg border p-4 space-y-3 bg-white'>
+              <div className='flex items-start justify-between gap-3'>
+                <div className='min-w-0'>
+                  <p className='font-medium break-words'>{car.title}</p>
+                  <p className='text-sm text-gray-500'>
+                    £{Number(car.price).toLocaleString('en-GB')} · {car.year} · {car.miles_driven} miles
+                  </p>
+                </div>
+                <Badge variant={car.is_available ? 'default' : 'secondary'}>
+                  {car.is_available ? 'Available' : 'Sold'}
+                </Badge>
+              </div>
+              {renderActions(car)}
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop: full table */}
+        <div className='hidden md:block overflow-x-auto'>
+          <Table>
+            <TableHeader><TableRow><TableHead>Make / Model</TableHead><TableHead>Price</TableHead><TableHead>Year</TableHead><TableHead>Mileage</TableHead><TableHead>Available</TableHead><TableHead className='text-right'>Actions</TableHead></TableRow></TableHeader>
+            <TableBody>
+              {cars.map(car => (
+                <TableRow key={car.id}>
+                  <TableCell className='font-medium'>{car.title}</TableCell>
+                  <TableCell>£{Number(car.price).toLocaleString('en-GB')}</TableCell>
+                  <TableCell>{car.year}</TableCell>
+                  <TableCell>{car.miles_driven} miles</TableCell>
+                  <TableCell>
+                    <Badge variant={car.is_available ? 'default' : 'secondary'}>
+                      {car.is_available ? 'Available' : 'Sold'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className='text-right'>
+                    {renderActions(car)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </>
     );
   };
 
@@ -355,7 +382,7 @@ const AdminStockManagement = () => {
       <CardContent>
         <div className='flex items-center flex-wrap gap-2 mb-4'>
           <Search className='w-4 h-4 text-gray-400' />
-          <Input placeholder='Search cars...' className='max-w-sm' value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          <Input placeholder='Search cars...' className='w-full max-w-sm' value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
         </div>
 
         <Tabs defaultValue={'available'} className='w-full'>
@@ -485,7 +512,7 @@ const AdminStockManagement = () => {
               <Label htmlFor='avail'>Available for sale</Label>
             </div>
 
-            <div className='flex justify-end gap-2 mt-5'>
+            <div className='flex flex-col-reverse sm:flex-row sm:justify-end gap-2 mt-5'>
               <Button variant='outline' onClick={() => handleFormDialogChange(false)} disabled={isSaving}>
                 Cancel
               </Button>
