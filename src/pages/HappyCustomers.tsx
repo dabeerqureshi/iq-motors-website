@@ -4,6 +4,7 @@ import CustomerCard from "@/components/CustomerCard";
 // import { happyCustomers } from "@/data/customers";
 import { useHappyCustomers } from "@/hooks/useHappyCustomers";
 import { useMemo } from "react";
+import { useSeo, pageSeo } from "@/lib/seo";
 
 const HappyCustomers = () => {
   const { customers: dbCustomers, loading, error } = useHappyCustomers();
@@ -22,6 +23,8 @@ const HappyCustomers = () => {
     // Combine with static customers
     return [...convertedDbCustomers];
   }, [dbCustomers]);
+
+  useSeo(pageSeo("/customers"));
 
   return (
     <div className="min-h-screen flex flex-col">

@@ -3,8 +3,11 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ContactForm from "@/components/ContactForm";
 import { MapPin, Phone, Mail } from "lucide-react";
+import { useSeo, pageSeo } from "@/lib/seo";
 
 const Contact = () => {
+  useSeo(pageSeo("/contact"));
+
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />

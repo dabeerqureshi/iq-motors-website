@@ -1,0 +1,187 @@
+{
+  "site": {
+    "name": "IQ Motors Limited",
+    "shortName": "IQ Motors",
+    "url": "https://www.iqmotorslimited.com",
+    "description": "Mercedes-Benz specialists in Northfields, West Ealing. Quality used Mercedes-Benz cars, expert servicing and flexible finance.",
+    "telephone": "+447877028198",
+    "phoneDisplay": "07877 028198",
+    "email": "iqmotors0@gmail.com",
+    "foundingDate": "2011",
+    "priceRange": "££",
+    "logo": "https://www.iqmotorslimited.com/lovable-uploads/3c7bcaea-58c7-4726-9db6-0000eb740f42.png",
+    "image": "https://www.iqmotorslimited.com/lovable-uploads/ea048769-bd2d-431c-b30b-d7aaea18d03d.png",
+    "address": {
+      "streetAddress": "28 Northfield Avenue",
+      "addressLocality": "Northfields, Ealing",
+      "addressRegion": "London",
+      "postalCode": "W13 9RL",
+      "addressCountry": "GB"
+    },
+    "geo": { "latitude": 51.5033, "longitude": -0.3167 },
+    "areaServed": [
+      "Ealing",
+      "Northfields",
+      "West Ealing",
+      "Hanwell",
+      "Acton",
+      "Brentford",
+      "Southall",
+      "Chiswick",
+      "West London",
+      "London"
+    ],
+    "openingHours": [
+      {
+        "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+        "opens": "09:00",
+        "closes": "20:00"
+      },
+      { "days": ["Saturday"], "opens": "09:00", "closes": "18:00" }
+    ],
+    "defaultTitle": "Used Mercedes-Benz Dealer in Ealing, West London | IQ Motors",
+    "defaultDescription": "Autotrader award-winning Mercedes-Benz specialists in Northfields, Ealing. Over 30 quality used cars in stock, finance available and expert servicing. Call 07877 028198.",
+    "twitterHandle": null,
+    "sameAs": []
+  },
+
+  "routes": [
+    {
+      "path": "/",
+      "title": "Used Mercedes-Benz Dealer in Ealing, West London | IQ Motors",
+      "description": "Autotrader award-winning Mercedes-Benz specialists in Northfields, Ealing. Over 30 quality used cars in stock, finance available and expert servicing. Call 07877 028198.",
+      "changefreq": "weekly",
+      "priority": "1.0",
+      "ogType": "website",
+      "schema": ["autoDealer"]
+    },
+    {
+      "path": "/stock",
+      "title": "Used Mercedes-Benz For Sale in Ealing | IQ Motors",
+      "description": "Browse every used Mercedes-Benz in stock at our Northfields, Ealing showroom. Finance available and free delivery within 10 miles. Call IQ Motors on 07877 028198.",
+      "changefreq": "daily",
+      "priority": "0.9",
+      "ogType": "website",
+      "schema": ["autoDealer", "breadcrumb", "itemList"]
+    },
+    {
+      "path": "/sold",
+      "title": "Recently Sold Mercedes-Benz Cars | IQ Motors Ealing",
+      "description": "See the Mercedes-Benz cars recently sold to customers across Ealing and West London. Looking for yours? Browse our current stock or call 07877 028198.",
+      "changefreq": "weekly",
+      "priority": "0.6",
+      "ogType": "website",
+      "schema": ["autoDealer", "breadcrumb"]
+    },
+    {
+      "path": "/customers",
+      "title": "Happy Customers | IQ Motors Mercedes-Benz Ealing",
+      "description": "Real IQ Motors customers with the Mercedes-Benz they bought from our Ealing showroom. Read why drivers across West London choose us. Call 07877 028198.",
+      "changefreq": "monthly",
+      "priority": "0.5",
+      "ogType": "website",
+      "schema": ["autoDealer", "breadcrumb"]
+    },
+    {
+      "path": "/finance",
+      "title": "Car Finance in Ealing, West London | IQ Motors",
+      "description": "Flexible finance on used Mercedes-Benz at IQ Motors, Ealing. Competitive rates, part exchange welcome and options to suit your budget. Call 07877 028198.",
+      "changefreq": "monthly",
+      "priority": "0.7",
+      "ogType": "website",
+      "schema": ["autoDealer", "breadcrumb"]
+    },
+    {
+      "path": "/servicing",
+      "title": "Mercedes-Benz Servicing in Ealing | IQ Motors",
+      "description": "Specialist Mercedes-Benz servicing and repairs in Northfields, Ealing. Manufacturer service schedules, warranty-safe and we beat main dealer prices. Call 07877 028198.",
+      "changefreq": "monthly",
+      "priority": "0.8",
+      "ogType": "website",
+      "schema": ["autoDealer", "breadcrumb", "service", "faq"]
+    },
+    {
+      "path": "/contact",
+      "title": "Contact IQ Motors | Mercedes-Benz Dealer in Ealing",
+      "description": "Visit IQ Motors at 28 Northfield Avenue, Ealing W13 9RL, call 07877 028198 or send us a message. Open 7 days a week by appointment.",
+      "changefreq": "monthly",
+      "priority": "0.8",
+      "ogType": "website",
+      "schema": ["autoDealer", "breadcrumb"]
+    },
+    {
+      "path": "/about",
+      "title": "About IQ Motors | Mercedes-Benz Specialists Since 2011",
+      "description": "IQ Motors Limited has been a family-run Mercedes-Benz specialist in Northfields, Ealing since 2011. Autotrader award-winning service. Call 07877 028198.",
+      "changefreq": "monthly",
+      "priority": "0.6",
+      "ogType": "website",
+      "schema": ["autoDealer", "breadcrumb", "aboutPage"]
+    },
+    {
+      "path": "/admin-IQmotors",
+      "title": "Admin | IQ Motors",
+      "description": "Private administration area.",
+      "changefreq": "yearly",
+      "priority": "0.1",
+      "ogType": "website",
+      "noindex": true,
+      "sitemap": false,
+      "schema": []
+    }
+  ],
+
+  "notFound": {
+    "path": "/404",
+    "title": "Page Not Found | IQ Motors",
+    "description": "The page you were looking for does not exist. Browse our used Mercedes-Benz stock or contact IQ Motors in Ealing on 07877 028198.",
+    "noindex": true
+  },
+
+  "vehicle": {
+    "title": "{year} {title} | £{price} | IQ Motors Ealing",
+    "description": "{year} {title} with {mileage} miles, £{price} at IQ Motors — Mercedes-Benz specialists in Ealing, West London. Finance available, call 07877 028198."
+  },
+
+  "services": [
+    {
+      "name": "Mercedes-Benz Servicing & Maintenance",
+      "description": "Scheduled Mercedes-Benz servicing carried out in accordance with manufacturer service schedules, keeping your new car warranty unaffected."
+    },
+    {
+      "name": "Mercedes-Benz Repairs & Diagnostics",
+      "description": "Specialist fault diagnosis and repair for Mercedes-Benz vehicles at our Northfields, Ealing workshop."
+    },
+    {
+      "name": "Used Mercedes-Benz Sales",
+      "description": "Over 30 quality used Mercedes-Benz cars in stock, with finance available and free delivery within 10 miles."
+    }
+  ],
+
+  "faqs": [
+    {
+      "question": "What Mercedes-Benz cars do you have in stock?",
+      "answer": "We hold over 30 quality used Mercedes-Benz cars at our Northfields, Ealing showroom at any one time. Our full inventory is listed on our stock page and updated regularly, so you can check availability before you visit."
+    },
+    {
+      "question": "Do you offer car finance?",
+      "answer": "Yes. IQ Motors offers flexible finance options on our used Mercedes-Benz stock, including part exchange. Call us on 07877 028198 to discuss a package that suits your budget."
+    },
+    {
+      "question": "Do you deliver cars?",
+      "answer": "Yes — we offer free delivery within 10 miles of our Ealing showroom. A charge applies for delivery beyond 10 miles and fast delivery is available. Call 07877 028198 to arrange."
+    },
+    {
+      "question": "When are you open?",
+      "answer": "We are open 7 days a week on an appointment-only basis, with same-day appointments often available. Message us outside office hours and we will be happy to help."
+    },
+    {
+      "question": "Will servicing at IQ Motors affect my Mercedes-Benz warranty?",
+      "answer": "No. All servicing is carried out in accordance with Manufacturer Service Schedules, which means your new car warranty will be unaffected."
+    },
+    {
+      "question": "Can you beat Mercedes main dealer service prices?",
+      "answer": "Yes. We guarantee to beat any local Mercedes main dealer price for an identical service."
+    }
+  ]
+}
