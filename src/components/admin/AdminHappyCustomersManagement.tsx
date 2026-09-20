@@ -235,7 +235,7 @@ const AdminHappyCustomersManagement = () => {
                     </div>
                   </div>
                 </div>
-                <div className="flex justify-end gap-2">
+                <div className="flex justify-end gap-2 flex-col-reverse sm:flex-row">
                   <Button
                     variant="outline"
                     onClick={() => setIsAddDialogOpen(false)}
@@ -276,7 +276,7 @@ const AdminHappyCustomersManagement = () => {
                     </p>
                   </div>
                 </div>
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity space-x-1">
+                <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity space-x-1 top-2 right-2 absolute">
                   <Button
                     variant="outline"
                     size="sm"

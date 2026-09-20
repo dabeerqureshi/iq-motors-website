@@ -41,17 +41,17 @@ const Admin = () => {
       <main className="flex-grow bg-gray-50">
         <div className="bg-cardealer-primary text-white py-8">
           <div className="container mx-auto px-4">
-            <div className="flex justify-between items-center">
+            <div className='flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4'>
               <div>
-                <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
-                <p className="text-xl opacity-90">
+                <h1 className="text-2xl sm:text-3xl font-bold mb-2">Admin Dashboard</h1>
+                <p className="text-lg sm:text-xl opacity-90">
                   Manage your dealership operations
                 </p>
               </div>
               <Button
                 variant="outline"
                 onClick={logout}
-                className="bg-white text-cardealer-primary hover:bg-gray-100 flex items-center gap-2"
+                className="bg-white text-cardealer-primary hover:bg-gray-100 flex items-center gap-2 w-full sm:w-auto justify-center"
               >
                 <LogOut className="w-4 h-4" />
                 Logout
