@@ -21,32 +21,7 @@ import CarImageGallery from "@/components/CarImageGallery";
 import AnimatedSection from "@/components/AnimatedSection";
 import { supabase } from "@/supabase/supabase";
 import { useSeo, vehicleSeo, vehicleSchema } from "@/lib/seo";
-
-interface StockListItem {
-  id: number;
-  title: string;
-  price: number;
-  year: string | number;
-  miles_driven: string | null;
-  description: string | null;
-  attributes: string[] | null;
-  is_available: boolean;
-  image_url: string[] | null;
-}
-
-const convertToCar = (item: StockListItem): Car => ({
-  id: item.id,
-  title: item.title,
-  make: "Mercedes-Benz",
-  model: item.title.split(" ").slice(-1)[0] || "Unknown",
-  year: Number(item.year),
-  price: Number(item.price),
-  description: item.description || "",
-  imageUrl: item.image_url || [],
-  mileage: parseInt((item.miles_driven || "0").replace(/,/g, "")) || 0,
-  features: item.attributes || [],
-  isSold: !item.is_available,
-});
+import { toCar, StockRow } from "@/lib/stock";
 
 const CarDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -70,7 +45,7 @@ const CarDetail = () => {
         if (fetchError) throw fetchError;
 
         if (!cancelled && data) {
-          setCar(convertToCar(data as StockListItem));
+          setCar(toCar(data as StockRow));
         }
       } catch (err) {
         console.error("Error fetching car:", err);
@@ -353,7 +328,7 @@ const CarDetail = () => {
                         variant="outline"
                         className="w-full mb-3 border-cardealer-primary text-cardealer-primary hover:bg-cardealer-primary hover:text-white"
                       >
-                        <a href="tel:07877028198">
+                        <a href="tel:+447877028198">
                           <Phone className="mr-2 h-4 w-4" />
                           Call 07877 028198
                         </a>

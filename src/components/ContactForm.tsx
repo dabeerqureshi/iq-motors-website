@@ -9,6 +9,10 @@ const serviceId = import.meta.env.VITE_SERVICE_ID_EMAILJS;
 const templateId = import.meta.env.VITE_TEMPLATE_ID_EMAILJS;
 const publicKey = import.meta.env.VITE_PUBLIC_KEY_EMAILJS;
 
+// Vite inlines these at build time, so a missing value makes the form silently
+// fail with a 404 from EmailJS. Surface one actionable message instead.
+const isEmailJsConfigured = Boolean(serviceId && templateId && publicKey);
+
 const ContactForm = () => {
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
@@ -46,6 +50,17 @@ const ContactForm = () => {
     e.preventDefault();
 
     if (!formRef.current || isSubmitting) return;
+
+    if (!isEmailJsConfigured) {
+      toast({
+        title: "This form is not configured yet",
+        description:
+          "Messages cannot be sent right now — please call us on 07877 028198. " +
+          "(The EmailJS environment variables are missing from this deployment.)",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setIsSubmitting(true);
 
