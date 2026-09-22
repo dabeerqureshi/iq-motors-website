@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Hero from "@/components/Hero";
-import CarCard from "@/components/CarCard";
+import CarCard, { type Car } from "@/components/CarCard";
 import BrandCertifications from "@/components/BrandCertifications";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
@@ -10,59 +10,102 @@ import { supabase } from "@/supabase/supabase";
 import AnimatedSection from "@/components/AnimatedSection";
 import { useSeo, pageSeo } from "@/lib/seo";
 
+interface StockRow {
+  id: string | number;
+  title: string;
+  year: string | number | null;
+  price: number | string | null;
+  description: string | null;
+  image_url: string[] | string | null;
+  miles_driven: string | number | null;
+  attributes: string[] | null;
+}
+
+interface FeaturedTestimonial {
+  id: string | number;
+  image_url: string | null;
+}
+
+const toFeaturedCar = (item: StockRow): Car => ({
+  id: item.id,
+  title: item.title,
+  make: "Mercedes-Benz",
+  model: item.title.split(" ").slice(-1)[0] || "",
+  year: Number(item.year),
+  price: Number(item.price),
+  description: item.description || "",
+  imageUrl: Array.isArray(item.image_url)
+    ? item.image_url
+    : item.image_url
+      ? [item.image_url]
+      : [],
+  mileage: Number(String(item.miles_driven ?? "").replace(/,/g, "")) || 0,
+  features: Array.isArray(item.attributes) ? item.attributes : [],
+  isSold: false,
+});
+
 const Index = () => {
-  const [featuredCars, setFeaturedCars] = useState([]);
-  const [featuredTestimonials, setFeaturedTestimonials] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [featuredCars, setFeaturedCars] = useState<Car[]>([]);
+  const [featuredTestimonials, setFeaturedTestimonials] = useState<
+    FeaturedTestimonial[]
+  >([]);
+  const [carsLoading, setCarsLoading] = useState(true);
+  const [testimonialsLoading, setTestimonialsLoading] = useState(true);
+  const [carsError, setCarsError] = useState(false);
+  const [testimonialsError, setTestimonialsError] = useState(false);
 
   useEffect(() => {
-    const fetchHomeData = async () => {
-      setLoading(true);
+    // Fetched independently so that a failure in one section (e.g. the customer
+    // gallery) can never blank out the other section of the homepage.
+    const fetchFeaturedCars = async () => {
       try {
-        // Fetch featured cars from stock_list where is_available = true
-        const { data: carsData, error: carsError } = await supabase
+        setCarsLoading(true);
+        setCarsError(false);
+
+        const { data: carsData, error: carsErr } = await supabase
           .from("stock_list")
           .select("*")
           .eq("is_available", true)
+          .order("created_at", { ascending: false })
           .limit(6);
 
-        if (carsError) throw carsError;
+        if (carsErr) throw carsErr;
 
-        const formattedCars = carsData.map((item) => ({
-          id: item.id,
-          title: item.title,
-
-          year: Number(item.year),
-          price: Number(item.price),
-          description: item.description || "",
-          imageUrl: Array.isArray(item.image_url)
-            ? item.image_url
-            : item.image_url
-              ? [item.image_url]
-              : [],
-          mileage: parseInt(item.miles_driven?.replace(/,/g, "") || "0"),
-          features: item.attributes || [],
-        }));
-
-        setFeaturedCars(formattedCars);
-
-        // Fetch featured testimonials from testimonials table
-        const { data: testimonialsData, error: testimonialsError } =
-          await supabase.from("happy_customers").select("*").limit(3);
-
-        if (testimonialsError) throw testimonialsError;
-
-        setFeaturedTestimonials(testimonialsData);
+        setFeaturedCars(((carsData as StockRow[] | null) ?? []).map(toFeaturedCar));
       } catch (err) {
-        console.error("Error loading homepage data:", err);
-        setError("Failed to load homepage content.");
+        console.error("Error loading featured cars:", err);
+        setCarsError(true);
       } finally {
-        setLoading(false);
+        setCarsLoading(false);
       }
     };
 
-    fetchHomeData();
+    const fetchFeaturedCustomers = async () => {
+      try {
+        setTestimonialsLoading(true);
+        setTestimonialsError(false);
+
+        const { data: testimonialsData, error: testimonialsErr } = await supabase
+          .from("happy_customers")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(3);
+
+        if (testimonialsErr) throw testimonialsErr;
+
+        setFeaturedTestimonials(
+          (testimonialsData as FeaturedTestimonial[] | null) ?? []
+        );
+      } catch (err) {
+        console.error("Error loading happy customers:", err);
+        setTestimonialsError(true);
+      } finally {
+        setTestimonialsLoading(false);
+      }
+    };
+
+    fetchFeaturedCars();
+    fetchFeaturedCustomers();
   }, []);
 
   useSeo(
@@ -93,16 +136,27 @@ const Index = () => {
               </p>
             </div>
 
-            {loading ? (
+            {carsLoading ? (
               <div className="text-center py-12">
                 <div className="animate-pulse-slow text-lg text-gray-600">
                   Loading featured cars...
                 </div>
               </div>
-            ) : error ? (
-              <div className="text-center py-8 text-gray-600">
+            ) : carsError ? (
+              <div className="text-center py-8 text-gray-600" role="status">
                 We're having trouble loading our featured vehicles right now.
-                Please check back shortly.
+                Please call us on{" "}
+                <a
+                  href="tel:07877028198"
+                  className="font-semibold hover:underline"
+                >
+                  07877 028198
+                </a>{" "}
+                or browse the{" "}
+                <Link to="/stock" className="font-semibold hover:underline">
+                  full inventory
+                </Link>
+                .
               </div>
             ) : featuredCars.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-8">
@@ -145,14 +199,14 @@ const Index = () => {
               </p>
             </div>
 
-            {loading ? (
+            {testimonialsLoading ? (
               <div className="text-center py-12">
                 <div className="animate-pulse-slow text-lg text-gray-600">
                   Loading testimonials...
                 </div>
               </div>
-            ) : error ? (
-              <div className="text-center py-8 text-gray-600">
+            ) : testimonialsError ? (
+              <div className="text-center py-8 text-gray-600" role="status">
                 We're having trouble loading our happy customers right now.
                 Please check back shortly.
               </div>

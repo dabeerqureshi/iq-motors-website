@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import type { KeyboardEvent, MouseEvent } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface CarImageGalleryProps {
@@ -12,8 +13,15 @@ const CarImageGallery = ({
   mainImage,
   carTitle,
 }: CarImageGalleryProps) => {
-  const allImages = mainImage ? [mainImage, ...images] : images;
+  // Defensive: a legacy row could hold a scalar string instead of an array.
+  const safeImages = Array.isArray(images) ? images.filter(Boolean) : [];
+  const allImages = mainImage ? [mainImage, ...safeImages] : safeImages;
   const [current, setCurrent] = useState(0);
+
+  // Keep the active index in range when the image list changes (e.g. car swap).
+  useEffect(() => {
+    setCurrent((c) => (c >= allImages.length ? 0 : c));
+  }, [allImages.length]);
 
   // Multi-image navigation handlers (must be declared before early return to respect rules of hooks)
   const prev = useCallback(
@@ -25,21 +33,28 @@ const CarImageGallery = ({
     [allImages.length]
   );
 
-  // Keyboard navigation for accessibility
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        prev();
-      } else if (e.key === "ArrowRight") {
-        e.preventDefault();
-        next();
-      }
-    };
+  // Keyboard navigation for accessibility, scoped to the gallery itself so that
+  // arrow keys don't hijack page scrolling and several galleries on one page
+  // (e.g. the stock grid) don't all advance at once.
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      e.stopPropagation();
+      prev();
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      e.stopPropagation();
+      next();
+    }
+  };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [prev, next]);
+  // Controls live inside a card that may itself link elsewhere: keep clicks on
+  // the gallery controls from navigating away.
+  const handleControl = (e: MouseEvent<HTMLButtonElement>, action: () => void) => {
+    e.preventDefault();
+    e.stopPropagation();
+    action();
+  };
 
   // Single image: render directly, no carousel overhead.
   if (allImages.length <= 1) {
@@ -58,18 +73,29 @@ const CarImageGallery = ({
   // Multi-image: custom gallery with navigation (replaces shadcn Carousel,
   // which has ref-callback issues with embla v8 causing blank frames).
   return (
-    <div className="relative w-full">
+    <div
+      role="group"
+      aria-roledescription="carousel"
+      aria-label={`${carTitle} images`}
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      className="relative w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cardealer-primary"
+    >
       <div className="relative w-full pt-[75%] overflow-hidden rounded-lg border border-gray-200">
         <ImageWithFallback
           src={allImages[current]}
-          alt={`${carTitle} - Slide ${current + 1}`}
+          alt={`${carTitle} - image ${current + 1} of ${allImages.length}`}
           hasImage={Boolean(allImages[current])}
         />
       </div>
 
+      <span className="sr-only" aria-live="polite">
+        Image {current + 1} of {allImages.length}
+      </span>
+
       <button
-        onClick={prev}
-        className="absolute left-2 top-1/2 -translate-y-1/2 z-20 h-8 w-8 rounded-full bg-white/80 shadow-md flex items-center justify-center hover:bg-white transition-colors"
+        onClick={(e) => handleControl(e, prev)}
+        className="absolute left-2 top-1/2 -translate-y-1/2 z-20 h-8 w-8 rounded-full bg-white/80 shadow-md flex items-center justify-center hover:bg-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cardealer-primary"
         aria-label="Previous image"
         type="button"
       >
@@ -77,8 +103,8 @@ const CarImageGallery = ({
       </button>
 
       <button
-        onClick={next}
-        className="absolute right-2 top-1/2 -translate-y-1/2 z-20 h-8 w-8 rounded-full bg-white/80 shadow-md flex items-center justify-center hover:bg-white transition-colors"
+        onClick={(e) => handleControl(e, next)}
+        className="absolute right-2 top-1/2 -translate-y-1/2 z-20 h-8 w-8 rounded-full bg-white/80 shadow-md flex items-center justify-center hover:bg-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cardealer-primary"
         aria-label="Next image"
         type="button"
       >
@@ -89,13 +115,14 @@ const CarImageGallery = ({
         {allImages.map((_, i) => (
           <button
             key={i}
-            onClick={() => setCurrent(i)}
+            onClick={(e) => handleControl(e, () => setCurrent(i))}
             className={`h-2 transition-all rounded-full ${
               i === current
                 ? "w-6 bg-cardealer-primary"
                 : "w-2 bg-white/60 hover:bg-white/80"
             }`}
             aria-label={`Go to slide ${i + 1}`}
+            aria-current={i === current}
             type="button"
           />
         ))}
