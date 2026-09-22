@@ -47,7 +47,7 @@ stable
 as $$
   select exists (
     select 1 from public.admin_users
-    where email = (auth.jwt() ->> 'email')
+    where lower(email) = lower(auth.jwt() ->> 'email')
   );
 $$;
 
@@ -120,14 +120,14 @@ create policy "Admins can view own row"
   on public.admin_users
   for select
   to authenticated
-  using (email = (auth.jwt() ->> 'email'));
+  using (lower(email) = lower(auth.jwt() ->> 'email'));
 
 drop policy if exists "Admins can update own row" on public.admin_users;
 create policy "Admins can update own row"
   on public.admin_users
   for update
   to authenticated
-  using (email = (auth.jwt() ->> 'email'));
+  using (lower(email) = lower(auth.jwt() ->> 'email'));
 
 -- ============================================================================
 -- SETUP-ADMIN (run AFTER the above)

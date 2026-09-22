@@ -12,6 +12,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/supabase/supabase";
+import {
+  removeStoragePaths,
+  removeStorageUrls,
+  uploadImages,
+  type UploadedObject,
+} from "@/supabase/storage";
 import { useToast } from "@/hooks/use-toast";
 
 interface stock_list {
@@ -54,6 +60,7 @@ const AdminStockManagement = () => {
   const [stockItems, setStockItems] = useState<stock_list[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [deleteLoadingId, setDeleteLoadingId] = useState<string | null>(null);
   const [movingId, setMovingId] = useState<string | null>(null);
   const [isFormDialogOpen, setIsFormDialogOpen] = useState(false);
@@ -137,31 +144,21 @@ const AdminStockManagement = () => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const uploadImages = async (files: File[]): Promise<string[]> => {
-    const urls: string[] = [];
-    for (const file of files) {
-      const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
-      const path = 'car-images/' + Date.now() + '-' + Math.random().toString(36).slice(2) + '.' + ext;
-      const { error } = await supabase.storage
-        .from('car-images')
-        .upload(path, file, { contentType: file.type, upsert: false });
-      if (error) {
-        throw new Error(`Could not upload "${file.name}": ${error.message}`);
-      }
-      const { data: pub } = supabase.storage.from('car-images').getPublicUrl(path);
-      urls.push(pub.publicUrl);
-    }
-    return urls;
-  };
-
   const validateForm = (): string | null => {
     if (!formData.title.trim()) return 'Make / Model is required';
     const price = Number(formData.price);
-    if (!formData.price || !Number.isFinite(price) || price <= 0) return 'Enter a valid price';
+    if (!formData.price.trim() || !Number.isFinite(price) || price <= 0) return 'Enter a valid price';
+    if (price > 10000000) return 'That price looks unrealistically high - please check it';
     const year = Number(formData.year);
     const maxYear = new Date().getFullYear() + 1;
     if (!formData.year || !Number.isInteger(year) || year < 1900 || year > maxYear)
       return `Enter a valid year between 1900 and ${maxYear}`;
+    const mileage = formData.miles_driven.replace(/[\s,]/g, '');
+    if (mileage) {
+      const miles = Number(mileage);
+      if (!/^\d+$/.test(mileage) || miles > 2000000)
+        return 'Enter mileage as a whole number between 0 and 2,000,000 (or leave it blank)';
+    }
     return null;
   };
 
@@ -173,19 +170,26 @@ const AdminStockManagement = () => {
     }
 
     setIsSaving(true);
+    // Images the admin removed while editing - deleted from storage only after
+    // the row update succeeds, so a failed save never loses photos.
+    const removedImages = editingCar
+      ? (editingCar.image_url ?? []).filter(url => !existingImages.includes(url))
+      : [];
+    let uploaded: UploadedObject[] = [];
+
     try {
-      const newImageUrls = await uploadImages(selectedFiles);
+      uploaded = await uploadImages(selectedFiles);
       const payload = {
         title: formData.title.trim(),
         price: Number(formData.price),
         year: Number(formData.year),
-        miles_driven: formData.miles_driven.replace(/,/g, '').trim(),
+        miles_driven: formData.miles_driven.replace(/[\s,]/g, '').trim(),
         description: formData.description.trim() || null,
         attributes: formData.attributes
           ? formData.attributes.split(',').map(s => s.trim()).filter(Boolean)
           : null,
         is_available: formData.is_available,
-        image_url: [...existingImages, ...newImageUrls],
+        image_url: [...existingImages, ...uploaded.map(item => item.url)],
       };
 
       if (editingCar) {
@@ -205,14 +209,29 @@ const AdminStockManagement = () => {
         }
         toast({ title: 'Vehicle updated', description: `${payload.title} has been updated successfully` });
       } else {
-        const { error } = await supabase.from('stock_list').insert([payload]);
+        // Same trick as the update path: an INSERT blocked by RLS returns no
+        // rows, which would otherwise look like a success.
+        const { data, error } = await supabase.from('stock_list').insert([payload]).select('id');
         if (error) throw error;
+        if (!data || data.length === 0) {
+          throw new Error(
+            'The server did not allow this listing. Please log out and log back in, then try again.'
+          );
+        }
         toast({ title: 'Car added', description: `${payload.title} has been listed successfully` });
+      }
+
+      if (removedImages.length > 0) {
+        await removeStorageUrls(removedImages);
       }
 
       handleFormDialogChange(false);
       fetchStockItems();
     } catch (e) {
+      // Roll the whole upload back so a failed save cannot orphan files.
+      if (uploaded.length > 0) {
+        await removeStoragePaths(uploaded.map(item => item.path));
+      }
       toast({
         title: editingCar ? 'Update failed' : 'Add failed',
         description: (e as Error).message || (editingCar ? 'Could not update vehicle' : 'Could not add car'),
@@ -226,12 +245,17 @@ const AdminStockManagement = () => {
   const fetchStockItems = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const { data, error } = await supabase
         .from('stock_list').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       setStockItems((data ?? []) as stock_list[]);
     } catch (e) {
-      toast({ title: 'Fetch failed', description: (e as Error).message || 'Could not load stock', variant: 'destructive' });
+      const message = (e as Error).message || 'Could not load stock';
+      // Keep this visible in the panel too: a toast disappears and the table
+      // would otherwise look like an empty inventory.
+      setLoadError(message);
+      toast({ title: 'Fetch failed', description: message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -239,8 +263,9 @@ const AdminStockManagement = () => {
 
   useEffect(() => { fetchStockItems(); }, []);
 
-  const handleDeleteCar = async (id: string) => {
+  const handleDeleteCar = async (car: stock_list) => {
     if (!window.confirm('Delete this vehicle? This cannot be undone.')) return;
+    const id = car.id;
     setDeleteLoadingId(id);
     try {
       const { data, error } = await supabase.from('stock_list').delete().eq('id', id).select('id');
@@ -251,7 +276,11 @@ const AdminStockManagement = () => {
           'The server did not allow this deletion. Your session may have expired — please log out and log back in, then try again.'
         );
       }
-      if (error) throw error;
+      // Row is gone, so its photos are unreachable from the site: clean them up
+      // (best effort - the delete above already succeeded).
+      if (car.image_url && car.image_url.length > 0) {
+        await removeStorageUrls(car.image_url);
+      }
       toast({ title: 'Deleted', description: 'Vehicle removed', variant: 'default' });
       fetchStockItems();
     } catch (e) {
@@ -303,8 +332,27 @@ const AdminStockManagement = () => {
   const renderTable = (cars: stock_list[], showAvail: boolean) => {
     if (loading) return (  <div className='space-y-4 py-8'><Skeleton className='h-6 w-full' /><Skeleton className='h-6 w-3/4' /><Skeleton className='h-6 w-1/2' /></div>);
 
+    if (loadError)
+      return (
+        <div className='text-center py-10 space-y-3' role='alert'>
+          <p className='font-medium text-cardealer-dark'>Could not load the stock list</p>
+          <p className='text-sm text-gray-500 break-words'>{loadError}</p>
+          <Button variant='outline' onClick={fetchStockItems}>
+            <RotateCcw className='w-4 h-4 mr-2' /> Try again
+          </Button>
+        </div>
+      );
+
     if (cars.length === 0)
-      return (  <p className='text-center text-gray-500 py-10'>{showAvail ? 'No available cars' : 'No sold cars'}</p>);
+      return (
+        <p className='text-center text-gray-500 py-10'>
+          {searchTerm
+            ? `No ${showAvail ? 'available' : 'sold'} cars match “${searchTerm}”`
+            : showAvail
+              ? 'No available cars'
+              : 'No sold cars'}
+        </p>
+      );
 
     const renderActions = (car: stock_list) => (
       <div className='flex flex-wrap justify-end gap-2'>
@@ -344,7 +392,7 @@ const AdminStockManagement = () => {
         <Button
           variant='destructive'
           size='sm'
-          onClick={() => handleDeleteCar(car.id)}
+          onClick={() => handleDeleteCar(car)}
           disabled={movingId === car.id || deleteLoadingId === car.id}
           aria-label={`Delete ${car.title}`}
         >
@@ -364,7 +412,8 @@ const AdminStockManagement = () => {
                 <div className='min-w-0'>
                   <p className='font-medium break-words'>{car.title}</p>
                   <p className='text-sm text-gray-500'>
-                    £{Number(car.price).toLocaleString('en-GB')} · {car.year} · {car.miles_driven} miles
+                    £{Number(car.price).toLocaleString('en-GB')} · {car.year} ·{' '}
+                    {car.miles_driven ? `${car.miles_driven} miles` : 'mileage n/a'}
                   </p>
                 </div>
                 <Badge variant={car.is_available ? 'default' : 'secondary'}>
@@ -384,9 +433,15 @@ const AdminStockManagement = () => {
               {cars.map(car => (
                 <TableRow key={car.id}>
                   <TableCell className='font-medium'>{car.title}</TableCell>
-                  <TableCell>£{Number(car.price).toLocaleString('en-GB')}</TableCell>
+                  <TableCell>
+                    {Number.isFinite(Number(car.price)) && Number(car.price) > 0
+                      ? `£${Number(car.price).toLocaleString('en-GB')}`
+                      : 'POA'}
+                  </TableCell>
                   <TableCell>{car.year}</TableCell>
-                  <TableCell>{car.miles_driven} miles</TableCell>
+                  <TableCell>
+                    {car.miles_driven ? `${car.miles_driven} miles` : 'n/a'}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={car.is_available ? 'default' : 'secondary'}>
                       {car.is_available ? 'Available' : 'Sold'}
@@ -409,8 +464,25 @@ const AdminStockManagement = () => {
       <CardHeader className='border-b border-cardealer-secondary'><CardTitle className='text-xl'>Admin Stock Panel</CardTitle></CardHeader>
       <CardContent>
         <div className='flex items-center flex-wrap gap-2 mb-4'>
-          <Search className='w-4 h-4 text-gray-400' />
-          <Input placeholder='Search cars...' className='w-full max-w-sm' value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          <Search className='w-4 h-4 text-gray-400' aria-hidden />
+          <Input
+            type='search'
+            placeholder='Search cars...'
+            aria-label='Search stock by make or model'
+            className='w-full max-w-sm'
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+          {searchTerm && (
+            <Button
+              variant='ghost'
+              size='sm'
+              onClick={() => setSearchTerm('')}
+              aria-label='Clear search'
+            >
+              <X className='w-4 h-4 mr-1' /> Clear
+            </Button>
+          )}
         </div>
 
         <Tabs defaultValue={'available'} className='w-full'>
@@ -459,7 +531,7 @@ const AdminStockManagement = () => {
               </div>
               <div className='space-y-2'>
                 <Label htmlFor='miles'>Mileage</Label>
-                <Input id='miles' type='number' min='0' placeholder='15000' value={formData.miles_driven} onChange={e => setFormData(prev => ({ ...prev, miles_driven: e.target.value }))} />
+                <Input id='miles' type='number' min='0' step='1' inputMode='numeric' placeholder='15000' value={formData.miles_driven} onChange={e => setFormData(prev => ({ ...prev, miles_driven: e.target.value }))} />
               </div>
               <div className='space-y-2 sm:col-span-2'>
                 <Label htmlFor='desc'>Description</Label>

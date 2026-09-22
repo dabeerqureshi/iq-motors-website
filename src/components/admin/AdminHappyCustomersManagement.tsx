@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/supabase/supabase";
+import { removeStorageUrls, uploadImages } from "@/supabase/storage";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_FILE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
@@ -64,21 +64,6 @@ const AdminHappyCustomersManagement = () => {
     e.target.value = "";
   };
 
-  const uploadCustomerPhoto = async (file: File): Promise<string> => {
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
-    const path = `happy-customers/${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2)}.${ext}`;
-    const { error } = await supabase.storage
-      .from("car-images")
-      .upload(path, file, { contentType: file.type, upsert: false });
-    if (error) {
-      throw new Error(`Could not upload "${file.name}": ${error.message}`);
-    }
-    const { data } = supabase.storage.from("car-images").getPublicUrl(path);
-    return data.publicUrl;
-  };
-
   const handleAddCustomer = async () => {
     if (!selectedFile) {
       toast({
@@ -90,9 +75,13 @@ const AdminHappyCustomersManagement = () => {
     }
 
     setIsSubmitting(true);
+    let uploadedPath: string | null = null;
     try {
-      const publicUrl = await uploadCustomerPhoto(selectedFile);
-      const { error } = await addCustomer(publicUrl);
+      const [uploaded] = await uploadImages([selectedFile], "happy-customers");
+      if (!uploaded) throw new Error("The upload did not return a file URL");
+      uploadedPath = uploaded.path;
+
+      const { error } = await addCustomer(uploaded.url);
       if (error) throw new Error(error);
 
       toast({
@@ -102,6 +91,11 @@ const AdminHappyCustomersManagement = () => {
       resetSelectedFile();
       setIsAddDialogOpen(false);
     } catch (e) {
+      // The row was not created, so remove the uploaded photo instead of
+      // leaving an orphaned file in the bucket.
+      if (uploadedPath) {
+        await removeStorageUrls([uploadedPath]);
+      }
       toast({
         title: "Error",
         description: (e as Error).message || "Failed to add customer",
@@ -112,11 +106,19 @@ const AdminHappyCustomersManagement = () => {
     }
   };
 
-  const handleDeleteCustomer = async (id: string | number) => {
-    if (!window.confirm("Are you sure you want to delete this customer image? This action cannot be undone.")) {
+  const handleDeleteCustomer = async (customer: {
+    id: string | number;
+    image_url: string;
+  }) => {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this customer image? This action cannot be undone."
+      )
+    ) {
       return;
     }
 
+    const { id, image_url } = customer;
     setDeleteLoadingId(id);
 
     const { error } = await deleteCustomer(id);
@@ -128,6 +130,8 @@ const AdminHappyCustomersManagement = () => {
         variant: "destructive",
       });
     } else {
+      // Row deleted: drop the photo from storage too (best effort).
+      await removeStorageUrls([image_url]);
       toast({
         title: "Success",
         description: "Happy customer deleted successfully",
@@ -289,7 +293,7 @@ const AdminHappyCustomersManagement = () => {
                     variant="outline"
                     size="sm"
                     disabled={deleteLoadingId === customer.id}
-                    onClick={() => handleDeleteCustomer(customer.id)}
+                    onClick={() => handleDeleteCustomer(customer)}
                     className="bg-white/90 hover:bg-white text-red-600 hover:text-red-700"
                   >
                     {deleteLoadingId === customer.id ? (
