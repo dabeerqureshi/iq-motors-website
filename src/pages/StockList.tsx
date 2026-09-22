@@ -114,7 +114,11 @@ const StockList = () => {
 
             {/* Results summary */}
             {!loading && !error && (
-              <p className="text-gray-600 mb-6 flex items-center gap-2">
+              <p
+                className="text-gray-600 mb-6 flex items-center gap-2"
+                role="status"
+                aria-live="polite"
+              >
                 <CarIcon className="h-4 w-4 text-cardealer-primary" />
                 Showing{" "}
                 <span className="font-semibold text-cardealer-dark">
@@ -166,16 +170,20 @@ const StockList = () => {
               </div>
             )}
 
-            {filteredCars.length === 0 && (
-              <EmptyStockList resetFilters={resetFilters} />
+            {!loading && !error && filteredCars.length === 0 && (
+              <EmptyStockList
+                resetFilters={hasActiveFilters ? resetFilters : undefined}
+              />
             )}
 
             {/* Pagination */}
-            <StockListPagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              goToPage={goToPage}
-            />
+            {!loading && !error && filteredCars.length > 0 && (
+              <StockListPagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                goToPage={goToPage}
+              />
+            )}
           </div>
         </section>
       </main>
