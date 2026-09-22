@@ -189,8 +189,20 @@ const AdminStockManagement = () => {
       };
 
       if (editingCar) {
-        const { error } = await supabase.from('stock_list').update(payload).eq('id', editingCar.id);
+        // Request the updated rows back: RLS can silently filter an UPDATE to
+        // 0 rows (PostgREST reports success with no error), so without this a
+        // blocked edit would be reported as "Vehicle updated".
+        const { data, error } = await supabase
+          .from('stock_list')
+          .update(payload)
+          .eq('id', editingCar.id)
+          .select('id');
         if (error) throw error;
+        if (!data || data.length === 0) {
+          throw new Error(
+            'The server did not allow this update. Your session may have expired — please log out and log back in, then try again.'
+          );
+        }
         toast({ title: 'Vehicle updated', description: `${payload.title} has been updated successfully` });
       } else {
         const { error } = await supabase.from('stock_list').insert([payload]);
@@ -231,7 +243,14 @@ const AdminStockManagement = () => {
     if (!window.confirm('Delete this vehicle? This cannot be undone.')) return;
     setDeleteLoadingId(id);
     try {
-      const { error } = await supabase.from('stock_list').delete().eq('id', id);
+      const { data, error } = await supabase.from('stock_list').delete().eq('id', id).select('id');
+      if (error) throw error;
+      // RLS can silently filter the DELETE to 0 rows; surface that as a failure.
+      if (!data || data.length === 0) {
+        throw new Error(
+          'The server did not allow this deletion. Your session may have expired — please log out and log back in, then try again.'
+        );
+      }
       if (error) throw error;
       toast({ title: 'Deleted', description: 'Vehicle removed', variant: 'default' });
       fetchStockItems();
@@ -246,10 +265,19 @@ const AdminStockManagement = () => {
     const toSold = car.is_available;
     setMovingId(car.id);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('stock_list')
         .update({ is_available: !car.is_available })
-        .eq('id', car.id);
+        .eq('id', car.id)
+        .select('id');
+      if (error) throw error;
+      // RLS can silently filter the UPDATE to 0 rows; surface that instead of
+      // pretending the move succeeded.
+      if (!data || data.length === 0) {
+        throw new Error(
+          'The server did not allow this change. Your session may have expired — please log out and log back in, then try again.'
+        );
+      }
       if (error) throw error;
       toast({
         title: toSold ? 'Moved to Sold' : 'Moved to Available',
