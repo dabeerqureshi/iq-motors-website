@@ -45,7 +45,7 @@ const Contact = () => {
                     </p>
                     <p className="flex items-center mb-2">
                       <Mail className="mr-2 h-5 w-5 text-cardealer-primary" />
-                      <span className="font-semibold">info@iqmotors.co.uk</span>
+                      <span className="font-semibold">info@iqmotorslimited.com</span>
                     </p>
                   </div>
                   <p className="mt-4 mb-2"><span className="font-semibold">Sales Hours:</span></p>

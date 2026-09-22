@@ -155,7 +155,7 @@ const Servicing = () => {
 
                     <p className="text-gray-600 font-bold">
                       <Mail size={18} className="inline-block mr-2" />{" "}
-                      iqmotors0@gmail.com
+                      info@iqmotorslimited.com
                     </p>
                   </div>
                 </div>
@@ -275,7 +275,7 @@ const Servicing = () => {
 
                     <p className="flex items-center mb-2">
                       <Mail className="mr-2 h-5 w-5 text-cardealer-primary" />
-                      <span className="font-semibold">iqmotors0@gmail.com</span>
+                      <span className="font-semibold">info@iqmotorslimited.com</span>
                     </p>
                   </div>
                   <p className="mt-4 mb-2">
