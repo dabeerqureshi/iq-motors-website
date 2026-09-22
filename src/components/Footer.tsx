@@ -78,7 +78,7 @@ const Footer = () => {
               </a>
               <p className="text-gray-300 flex items-center">
                 <Mail className="mr-2 h-5 w-5" />
-                iqmotors0@gmail.com
+                info@iqmotorslimited.com
               </p>
             </div>
           </div>

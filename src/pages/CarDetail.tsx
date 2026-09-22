@@ -342,7 +342,7 @@ const CarDetail = () => {
                         className="w-full mb-3 bg-cardealer-primary hover:bg-cardealer-secondary hover-lift"
                       >
                         <a
-                          href={`mailto:iqmotors0@gmail.com?subject=${enquirySubject}&body=${enquiryBody}`}
+                          href={`mailto:info@iqmotorslimited.com?subject=${enquirySubject}&body=${enquiryBody}`}
                         >
                           <Mail className="mr-2 h-4 w-4" />
                           Contact About This Car
