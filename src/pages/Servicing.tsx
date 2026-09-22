@@ -147,7 +147,7 @@ const Servicing = () => {
                   <div className="flex flex-col items-center mt-4">
                     <p className="text-gray-600 font-bold">
                       <PhoneCall size={18} className="inline-block mr-2" />
-                      <a href="tel:07877028198" className="hover:underline">
+                      <a href="tel:+447877028198" className="hover:underline">
                         07877 028198
                       </a>{" "}
                       or
@@ -266,7 +266,7 @@ const Servicing = () => {
                     <p className="pl-7">EALING</p>
                     <p className="pl-7 mb-2">W13 9RL</p>
                     <a
-                      href="tel:07877028198"
+                      href="tel:+447877028198"
                       className="flex items-center mb-2 hover:underline"
                     >
                       <Phone className="mr-2 h-5 w-5 text-cardealer-primary" />

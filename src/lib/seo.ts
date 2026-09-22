@@ -73,6 +73,14 @@ export const VEHICLE_TEMPLATES = seoData.vehicle as {
   description: string;
 };
 
+/** SEO payload for the 404 page (noindex: soft-404s must stay out of the index). */
+export const NOT_FOUND = seoData.notFound as {
+  path: string;
+  title: string;
+  description: string;
+  noindex: boolean;
+};
+
 /** Attribute used to mark tags this module owns, so it can update them safely. */
 const MANAGED = "data-seo";
 

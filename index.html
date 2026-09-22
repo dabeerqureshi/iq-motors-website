@@ -11,7 +11,7 @@
     />
     <meta name="theme-color" content="#1E40AF" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-            <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.json" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="IQ Motors Limited | Mercedes-Benz Specialists" />
@@ -25,39 +25,43 @@
     />
     <meta property="og:url" content="https://www.iqmotorslimited.com/" />
     <meta name="twitter:card" content="summary_large_image" />
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "AutoDealer",
-        "name": "IQ Motors Limited",
-        "description": "Mercedes-Benz specialists in Northfields, West Ealing. Quality used Mercedes-Benz cars, expert servicing and flexible finance.",
-        "url": "https://www.iqmotorslimited.com/",
-        "telephone": "+447877028198",
-        "email": "info@iqmotorslimited.com",
-        "address": {
-          "@type": "PostalAddress",
-          "streetAddress": "28 Northfield Avenue",
-          "addressLocality": "Ealing",
-          "addressRegion": "London",
-          "postalCode": "W13 9RL",
-          "addressCountry": "GB"
-        },
-        "openingHoursSpecification": [
-          {
-            "@type": "OpeningHoursSpecification",
-            "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
-            "opens": "09:00",
-            "closes": "20:00"
-          },
-          {
-            "@type": "OpeningHoursSpecification",
-            "dayOfWeek": "Saturday",
-            "opens": "09:00",
-            "closes": "18:00"
-          }
-        ],
-        "priceRange": "££"
-      }
+    <!--
+      Structured data (AutoDealer / Vehicle / FAQPage ...) is generated at runtime
+      by src/lib/seo.ts from src/data/seo.json, which is the single source of
+      truth. A second, hand-written AutoDealer block used to live here, so the
+      homepage published two competing "AutoDealer" entities (different
+      descriptions, no NAP match). Do not re-add it here.
+    -->
+    <script>
+      // Blank-page guard: if the bundle fails to load or throws before React
+      // mounts, show the visitor an explanation instead of an empty page.
+      // Once React has rendered something this becomes a no-op.
+      (function () {
+        var root = document.getElementById("root");
+        function fail(detail) {
+          if (!root || root.childElementCount > 0) return;
+          root.innerHTML =
+            '<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;padding:48px 24px;text-align:center;color:#1f2937">' +
+            '<h1 style="font-size:22px;margin:0 0 12px">Sorry, the site did not load</h1>' +
+            '<p style="margin:0 0 20px;color:#4b5563">Please reload the page. If it keeps happening, call us on ' +
+            '<a href="tel:+447877028198" style="color:#1E40AF">07877 028198</a>.</p>' +
+            '<button type="button" onclick="window.location.reload()" style="background:#1E40AF;color:#fff;border:0;border-radius:6px;padding:10px 18px;font-size:15px;cursor:pointer">Reload page</button>' +
+            (detail ? '<p style="margin:20px 0 0;font-size:12px;color:#9ca3af">' + detail + "</p>" : "") +
+            "</div>";
+        }
+        window.addEventListener("error", function (event) {
+          fail(event && event.message ? event.message : "");
+        });
+        window.addEventListener("unhandledrejection", function (event) {
+          fail(event && event.reason ? String(event.reason) : "");
+        });
+        // Module scripts run before `load`, so by now React should have mounted.
+        window.addEventListener("load", function () {
+          window.setTimeout(function () {
+            fail("The application script did not start.");
+          }, 4000);
+        });
+      })();
     </script>
   </head>
 

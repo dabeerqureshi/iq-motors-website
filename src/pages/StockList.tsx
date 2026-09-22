@@ -150,7 +150,7 @@ const StockList = () => {
                 <p>
                   Our vehicle database is temporarily unavailable. Please check
                   back shortly or call us on{" "}
-                  <a href="tel:07877028198" className="font-semibold hover:underline">
+                  <a href="tel:+447877028198" className="font-semibold hover:underline">
                     07877 028198
                   </a>
                   .

@@ -70,7 +70,7 @@ const Footer = () => {
               <p className="text-gray-300 pl-7">EALING</p>
               <p className="text-gray-300 pl-7 mb-2">W13 9RL</p>
               <a
-                href="tel:07877028198"
+                href="tel:+447877028198"
                 className="text-gray-300 flex items-center"
               >
                 <Phone className="mr-2 h-5 w-5" />

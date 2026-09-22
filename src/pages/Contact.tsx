@@ -52,7 +52,7 @@ const Contact = () => {
                   <ul className="list-disc list-inside ml-4 mb-2">
                     <li>Monday - Friday: 9:00 AM - 8:00 PM</li>
                     <li>Saturday: 9:00 AM - 6:00 PM</li>
-                    <li>Sunday: Closed</li>
+                    <li>Sunday: By appointment only (call 07877 028198)</li>
                   </ul>
                   <p className="mb-2"><span className="font-semibold">Service Hours:</span></p>
                   <ul className="list-disc list-inside ml-4">
