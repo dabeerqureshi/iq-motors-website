@@ -20,6 +20,14 @@ const distDir = resolve(root, "dist");
 const seoPath = resolve(root, "src/data/seo.json");
 
 /**
+ * Vehicle pages are a nice-to-have. A paused free-tier Supabase project (they
+ * auto-pause after ~7 days of inactivity) or a slow network must never stall or
+ * fail `npm run build`, so the read is time-boxed and every failure path just
+ * omits the /car/:id entries.
+ */
+const FETCH_TIMEOUT_MS = 15000;
+
+/**
  * Minimal .env loader — Vite already parsed these during `vite build`, but the
  * postbuild script runs in a fresh Node process where import.meta.env is not
  * available. This reads the same .env file Vite used so vehicle pages can be
@@ -83,20 +91,37 @@ async function fetchStock() {
     return [];
   }
 
-  const supabase = createClient(supabaseUrl, supabaseKey);
-  const { data, error } = await supabase
-    .from("stock_list")
-    .select(
-      "id,title,price,year,miles_driven,description,attributes,is_available,image_url,created_at"
-    )
-    .order("created_at", { ascending: false });
+  try {
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      global: {
+        fetch: (input, init) =>
+          fetch(input, { ...init, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
+      },
+    });
 
-  if (error) {
-    console.error("[sitemap] Supabase error:", error.message);
+    const { data, error } = await supabase
+      .from("stock_list")
+      .select(
+        "id,title,price,year,miles_driven,description,attributes,is_available,image_url,created_at"
+      )
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("[sitemap] Supabase error:", error.message);
+      return [];
+    }
+
+    return data ?? [];
+  } catch (err) {
+    // Offline, DNS failure, timeout or a paused project: log and carry on. A
+    // sitemap without vehicle pages is still valid, and the next deploy that can
+    // reach Supabase adds them back.
+    console.warn(
+      "[sitemap] could not reach Supabase — vehicle pages will be omitted:",
+      err instanceof Error ? err.message : err
+    );
     return [];
   }
-
-  return data ?? [];
 }
 
 function buildSitemapXml(siteUrl, routes, stock) {
@@ -143,7 +168,17 @@ Sitemap: ${siteUrl}/sitemap.xml
 }
 
 async function main() {
-  const seo = loadSeo();
+  let seo;
+  try {
+    seo = loadSeo();
+  } catch (err) {
+    console.warn(
+      "[sitemap] could not read src/data/seo.json:",
+      err instanceof Error ? err.message : err
+    );
+    return;
+  }
+
   const siteUrl = seo.site.url.replace(/\/$/, ""); // strip trailing slash
 
   const stock = await fetchStock();
@@ -163,7 +198,9 @@ async function main() {
   console.log("[sitemap] wrote robots.txt");
 }
 
+// Last line of defence: this is a `postbuild` step, so exiting non-zero fails
+// the whole deployment even though `vite build` already produced a valid dist/.
+// A missing sitemap is a SEO nit; a failed deploy blocks every other fix.
 main().catch((err) => {
-  console.error("[sitemap] fatal error:", err);
-  process.exit(1);
+  console.warn("[sitemap] skipped:", err instanceof Error ? err.message : err);
 });

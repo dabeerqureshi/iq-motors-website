@@ -19,19 +19,119 @@ import {
   type UploadedObject,
 } from "@/supabase/storage";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  normaliseFeatures,
+  normaliseImages,
+  normaliseMileage,
+  normalisePrice,
+  normaliseYear,
+} from "@/lib/stock";
 
+/**
+ * Raw `stock_list` row as PostgREST returns it. Deliberately loose: the table has
+ * changed shape over time (`year`/`miles_driven` are text columns, `price` can be
+ * text, and `image_url`/`attributes` may hold a legacy scalar string instead of
+ * an array).
+ */
 interface stock_list {
-  id: string;
+  id: string | number;
+  title: string | null;
+  price: number | string | null;
+  year: number | string | null;
+  miles_driven: string | number | null;
+  description: string | null;
+  attributes: unknown;
+  is_available: boolean | null;
+  image_url: unknown;
+  created_at: string | null;
+}
+
+/**
+ * What the panel renders: a `stock_list` row run through the same normalisers the
+ * public site uses (src/lib/stock.ts). Without this, one hand-edited row (scalar
+ * `image_url`, comma-separated `attributes`, NULL `is_available`) threw
+ * "… .join is not a function" and killed the Edit dialog.
+ */
+interface StockItem {
+  id: string | number;
   title: string;
   price: number;
   year: number;
-  miles_driven: string;
+  miles_driven: number;
   description: string | null;
-  attributes: string[] | null;
+  attributes: string[];
   is_available: boolean;
-  image_url: string[] | null;
-  created_at: string;
+  image_url: string[];
+  created_at: string | null;
 }
+
+/** Only an explicit `false` means sold - NULL (older rows) counts as available. */
+const isSoldRow = (row: { is_available: boolean | null }): boolean =>
+  row.is_available === false;
+
+const toStockItem = (row: stock_list): StockItem => ({
+  id: row.id,
+  title: row.title?.trim() || "Untitled vehicle",
+  price: normalisePrice(row.price),
+  year: normaliseYear(row.year),
+  miles_driven: normaliseMileage(row.miles_driven),
+  description: row.description ?? null,
+  attributes: normaliseFeatures(row.attributes),
+  is_available: !isSoldRow(row),
+  image_url: normaliseImages(row.image_url),
+  created_at: row.created_at ?? null,
+});
+
+/** The parts of a PostgREST/JS failure worth showing to an admin. */
+interface WriteError {
+  message?: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+  status?: number;
+}
+
+/**
+ * PostgREST reports a write that RLS filtered to 0 rows as a *success* with no
+ * error, so an empty result has to be treated as a failure - and explained.
+ */
+const describeZeroRows = (action: string): string =>
+  `The server accepted the request but ${action} changed 0 rows. That normally means a ` +
+  "row-level security policy filtered it out (an expired admin session looks the same). " +
+  "Sign out and back in, then retry - if it keeps failing, run sql/enable_rls.sql " +
+  "(see sql/diagnose_admin_writes.sql) in the Supabase SQL editor.";
+
+/** Turn a failed write into something the admin can act on. */
+const describeWriteError = (error: unknown): string => {
+  const { message = "", code = "", details = "", hint = "" } = (error ?? {}) as WriteError;
+
+  if (code === "42501" || /row-level security/i.test(message)) {
+    return (
+      `${message || "The database refused this write (row-level security)."} ` +
+      `Run sql/enable_rls.sql in the Supabase SQL editor.${hint ? ` (${hint})` : ""}`
+    );
+  }
+  if (isAuthFailure(error)) {
+    return "Your admin session is no longer valid — sign out and sign in again, then retry.";
+  }
+  return (
+    [message, code && `code ${code}`, details, hint].filter(Boolean).join(" · ") ||
+    "The request failed for an unknown reason."
+  );
+};
+
+/** True when the request went out without a usable admin session. */
+const isAuthFailure = (error: unknown): boolean => {
+  const { message = "", code = "", status } = (error ?? {}) as WriteError;
+  if (code === "42501" || /row-level security/i.test(message)) return false;
+  return (
+    status === 401 ||
+    status === 403 ||
+    code === "PGRST301" ||
+    /jwt|token|not authenticated/i.test(message)
+  );
+};
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_FILE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
@@ -57,17 +157,18 @@ const createEmptyForm = (): StockForm => ({
 });
 
 const AdminStockManagement = () => {
-  const [stockItems, setStockItems] = useState<stock_list[]>([]);
+  const [stockItems, setStockItems] = useState<StockItem[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [deleteLoadingId, setDeleteLoadingId] = useState<string | null>(null);
-  const [movingId, setMovingId] = useState<string | null>(null);
+  const [deleteLoadingId, setDeleteLoadingId] = useState<string | number | null>(null);
+  const [movingId, setMovingId] = useState<string | number | null>(null);
   const [isFormDialogOpen, setIsFormDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [editingCar, setEditingCar] = useState<stock_list | null>(null);
+  const [editingCar, setEditingCar] = useState<StockItem | null>(null);
   const [existingImages, setExistingImages] = useState<string[]>([]);
   const { toast } = useToast();
+  const { logout } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<StockForm>(createEmptyForm);
@@ -97,21 +198,36 @@ const AdminStockManagement = () => {
     setIsFormDialogOpen(true);
   };
 
-  const openEditDialog = (car: stock_list) => {
+  /**
+   * Single place where a failed write becomes UI: an expired/invalid session
+   * drops the admin back to the sign-in form instead of leaving them clicking a
+   * button that can never succeed.
+   */
+  const reportWriteFailure = async (title: string, error: unknown) => {
+    if (isAuthFailure(error)) {
+      toast({
+        title: 'Session expired',
+        description: 'Your admin session is no longer valid. Please sign in again.',
+        variant: 'destructive',
+      });
+      await logout();
+      return;
+    }
+    toast({ title, description: describeWriteError(error), variant: 'destructive' });
+  };
+
+  const openEditDialog = (car: StockItem) => {
     setEditingCar(car);
     setFormData({
-      title: car.title ?? "",
-      price: car.price != null ? String(car.price) : "",
-      year: car.year != null ? String(car.year) : "",
-      miles_driven:
-        car.miles_driven != null
-          ? String(car.miles_driven).replace(/[^\d]/g, "")
-          : "",
+      title: car.title,
+      price: car.price > 0 ? String(car.price) : "",
+      year: car.year > 0 ? String(car.year) : "",
+      miles_driven: car.miles_driven > 0 ? String(car.miles_driven) : "",
       description: car.description ?? "",
-      attributes: (car.attributes ?? []).join(", "),
+      attributes: car.attributes.join(", "),
       is_available: car.is_available,
     });
-    setExistingImages(car.image_url ?? []);
+    setExistingImages(car.image_url);
     clearSelectedFiles();
     setIsFormDialogOpen(true);
   };
@@ -203,9 +319,7 @@ const AdminStockManagement = () => {
           .select('id');
         if (error) throw error;
         if (!data || data.length === 0) {
-          throw new Error(
-            'The server did not allow this update. Your session may have expired — please log out and log back in, then try again.'
-          );
+          throw new Error(describeZeroRows('this update'));
         }
         toast({ title: 'Vehicle updated', description: `${payload.title} has been updated successfully` });
       } else {
@@ -214,9 +328,7 @@ const AdminStockManagement = () => {
         const { data, error } = await supabase.from('stock_list').insert([payload]).select('id');
         if (error) throw error;
         if (!data || data.length === 0) {
-          throw new Error(
-            'The server did not allow this listing. Please log out and log back in, then try again.'
-          );
+          throw new Error(describeZeroRows('this listing'));
         }
         toast({ title: 'Car added', description: `${payload.title} has been listed successfully` });
       }
@@ -232,11 +344,7 @@ const AdminStockManagement = () => {
       if (uploaded.length > 0) {
         await removeStoragePaths(uploaded.map(item => item.path));
       }
-      toast({
-        title: editingCar ? 'Update failed' : 'Add failed',
-        description: (e as Error).message || (editingCar ? 'Could not update vehicle' : 'Could not add car'),
-        variant: 'destructive',
-      });
+      await reportWriteFailure(editingCar ? 'Update failed' : 'Add failed', e);
     } finally {
       setIsSaving(false);
     }
@@ -249,9 +357,12 @@ const AdminStockManagement = () => {
       const { data, error } = await supabase
         .from('stock_list').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      setStockItems((data ?? []) as stock_list[]);
+      // Normalise once, here: a legacy/hand-edited row (null title, scalar
+      // image_url, comma-separated attributes, NULL flags) must never break the
+      // table render or the Edit dialog.
+      setStockItems(((data ?? []) as stock_list[]).map(toStockItem));
     } catch (e) {
-      const message = (e as Error).message || 'Could not load stock';
+      const message = describeWriteError(e) || 'Could not load stock';
       // Keep this visible in the panel too: a toast disappears and the table
       // would otherwise look like an empty inventory.
       setLoadError(message);
@@ -263,7 +374,7 @@ const AdminStockManagement = () => {
 
   useEffect(() => { fetchStockItems(); }, []);
 
-  const handleDeleteCar = async (car: stock_list) => {
+  const handleDeleteCar = async (car: StockItem) => {
     if (!window.confirm('Delete this vehicle? This cannot be undone.')) return;
     const id = car.id;
     setDeleteLoadingId(id);
@@ -272,25 +383,23 @@ const AdminStockManagement = () => {
       if (error) throw error;
       // RLS can silently filter the DELETE to 0 rows; surface that as a failure.
       if (!data || data.length === 0) {
-        throw new Error(
-          'The server did not allow this deletion. Your session may have expired — please log out and log back in, then try again.'
-        );
+        throw new Error(describeZeroRows('this deletion'));
       }
       // Row is gone, so its photos are unreachable from the site: clean them up
       // (best effort - the delete above already succeeded).
-      if (car.image_url && car.image_url.length > 0) {
+      if (car.image_url.length > 0) {
         await removeStorageUrls(car.image_url);
       }
       toast({ title: 'Deleted', description: 'Vehicle removed', variant: 'default' });
       fetchStockItems();
     } catch (e) {
-      toast({ title: 'Delete failed', description: (e as Error).message || 'Could not delete vehicle', variant: 'destructive' });
+      await reportWriteFailure('Delete failed', e);
     } finally {
       setDeleteLoadingId(null);
     }
   };
 
-  const handleMoveCar = async (car: stock_list) => {
+  const handleMoveCar = async (car: StockItem) => {
     const toSold = car.is_available;
     setMovingId(car.id);
     try {
@@ -303,11 +412,8 @@ const AdminStockManagement = () => {
       // RLS can silently filter the UPDATE to 0 rows; surface that instead of
       // pretending the move succeeded.
       if (!data || data.length === 0) {
-        throw new Error(
-          'The server did not allow this change. Your session may have expired — please log out and log back in, then try again.'
-        );
+        throw new Error(describeZeroRows('this change'));
       }
-      if (error) throw error;
       toast({
         title: toSold ? 'Moved to Sold' : 'Moved to Available',
         description: toSold
@@ -316,20 +422,24 @@ const AdminStockManagement = () => {
       });
       fetchStockItems();
     } catch (e) {
-      toast({
-        title: toSold ? 'Move failed' : 'Restore failed',
-        description: (e as Error).message || 'Could not update the vehicle',
-        variant: 'destructive',
-      });
+      await reportWriteFailure(toSold ? 'Move failed' : 'Restore failed', e);
     } finally {
       setMovingId(null);
     }
   };
 
-  const availableCars = stockItems.filter(c => c.is_available && (!searchTerm || c.title.toLowerCase().includes(searchTerm.toLowerCase())));
-  const soldCars = stockItems.filter(c => !c.is_available && (!searchTerm || c.title.toLowerCase().includes(searchTerm.toLowerCase())));
+  const matchesSearch = (car: StockItem) =>
+    !searchTerm || car.title.toLowerCase().includes(searchTerm.toLowerCase());
 
-  const renderTable = (cars: stock_list[], showAvail: boolean) => {
+  const availableCars = stockItems.filter(car => car.is_available && matchesSearch(car));
+  const soldCars = stockItems.filter(car => !car.is_available && matchesSearch(car));
+
+  const formatPrice = (price: number) =>
+    price > 0 ? `£${price.toLocaleString('en-GB')}` : 'POA';
+  const formatMileage = (miles: number) =>
+    miles > 0 ? `${miles.toLocaleString('en-GB')} miles` : 'n/a';
+
+  const renderTable = (cars: StockItem[], showAvail: boolean) => {
     if (loading) return (  <div className='space-y-4 py-8'><Skeleton className='h-6 w-full' /><Skeleton className='h-6 w-3/4' /><Skeleton className='h-6 w-1/2' /></div>);
 
     if (loadError)
@@ -354,7 +464,7 @@ const AdminStockManagement = () => {
         </p>
       );
 
-    const renderActions = (car: stock_list) => (
+    const renderActions = (car: StockItem) => (
       <div className='flex flex-wrap justify-end gap-2'>
         {car.is_available ? (
           <Button
@@ -412,8 +522,7 @@ const AdminStockManagement = () => {
                 <div className='min-w-0'>
                   <p className='font-medium break-words'>{car.title}</p>
                   <p className='text-sm text-gray-500'>
-                    £{Number(car.price).toLocaleString('en-GB')} · {car.year} ·{' '}
-                    {car.miles_driven ? `${car.miles_driven} miles` : 'mileage n/a'}
+                    {formatPrice(car.price)} · {car.year || '–'} · {formatMileage(car.miles_driven)}
                   </p>
                 </div>
                 <Badge variant={car.is_available ? 'default' : 'secondary'}>
@@ -433,15 +542,9 @@ const AdminStockManagement = () => {
               {cars.map(car => (
                 <TableRow key={car.id}>
                   <TableCell className='font-medium'>{car.title}</TableCell>
-                  <TableCell>
-                    {Number.isFinite(Number(car.price)) && Number(car.price) > 0
-                      ? `£${Number(car.price).toLocaleString('en-GB')}`
-                      : 'POA'}
-                  </TableCell>
-                  <TableCell>{car.year}</TableCell>
-                  <TableCell>
-                    {car.miles_driven ? `${car.miles_driven} miles` : 'n/a'}
-                  </TableCell>
+                  <TableCell>{formatPrice(car.price)}</TableCell>
+                  <TableCell>{car.year || '–'}</TableCell>
+                  <TableCell>{formatMileage(car.miles_driven)}</TableCell>
                   <TableCell>
                     <Badge variant={car.is_available ? 'default' : 'secondary'}>
                       {car.is_available ? 'Available' : 'Sold'}

@@ -57,9 +57,19 @@ in Vercel's build image).
 ## 🗄 Supabase setup
 
 1. Create a project and note its URL + anon key.
-2. Run the SQL in [`sql/enable_rls.sql`](sql/enable_rls.sql) via
-   **SQL Editor** — this enables Row Level Security (public read, admin-only
-   writes) and creates the `admin_users` table.
+2. Run the SQL files in the **SQL Editor**, in this order:
+   - [`sql/enable_rls.sql`](sql/enable_rls.sql) — enables Row Level Security
+     (public read, admin-only writes), backfills `is_available`, creates the
+     `admin_users` table and the `is_admin()` helper. **Admin writes (Mark Sold,
+     Back to Available, edit → save, delete) silently do nothing until the
+     UPDATE/DELETE policies exist**, so re-run it any time those buttons fail.
+   - [`sql/storage_policies.sql`](sql/storage_policies.sql) — creates the
+     `car-images` bucket plus the public-read / admin-write policies used by the
+     vehicle and happy-customer photo uploads.
+   - [`sql/diagnose_admin_writes.sql`](sql/diagnose_admin_writes.sql) — optional,
+     read-only. Prints the RLS flags, every policy with its `USING`/`WITH CHECK`,
+     `is_admin()`, the admin list, per-list row counts and the storage bucket in
+     one result set.
 3. Create your admin Auth user:
    - **Authentication → Users → Add user** (email + strong password)
    - Then add their row (replace the email):
@@ -247,3 +257,7 @@ opened directly or refreshed without a 404.
 | `info@iqmotorslimited.com` bounces / no mailbox | The mailbox does not exist on the domain. Create it at the mail host for `iqmotorslimited.com`, and keep the address in sync in `src/pages/Contact.tsx`, `src/pages/Servicing.tsx`, `src/pages/CarDetail.tsx`, `src/components/Footer.tsx`, `src/data/seo.json` and the JSON-LD `email` in `index.html`. |
 | Mail on `iqmotorslimited.com` breaks after moving DNS to Vercel | MX/SPF/DKIM records were not copied into *Vercel → Domains → DNS Records* before the nameserver switch. |
 | Build fails with `EBADENGINE` / wrong Node | Node is pinned to `22.x` in `package.json`; make sure the Vercel project's *Node.js Version* is not overridden to a deprecated major. |
+| Build log says `Missing required environment variable(s)` but the deployment succeeds | Intentional since #13: the build only **warns** (the site falls back to empty states, a call-us contact form and a reload guard). Add the variables for that environment and redeploy to get real data back. |
+| Admin buttons (Mark Sold / Back to Available / Edit → Save / Delete) fail with *"the server did not allow this change"* | The write was filtered by Row Level Security, so 0 rows changed — reads and inserts keep working. Run [`sql/enable_rls.sql`](sql/enable_rls.sql) in the Supabase SQL editor, then [`sql/diagnose_admin_writes.sql`](sql/diagnose_admin_writes.sql) to confirm the `stock_list` UPDATE/DELETE policies exist and have a `using` clause. |
+| A vehicle is missing from both `/stock` and `/sold` (and from both admin tabs) | Its `is_available` is NULL, which matches neither list. Run [`sql/enable_rls.sql`](sql/enable_rls.sql) (backfills NULL → true) and re-save the listing. |
+| Admin photo upload fails with `Bucket not found`, or uploaded images 404 | The `car-images` bucket or its policies are missing — run [`sql/storage_policies.sql`](sql/storage_policies.sql). |
