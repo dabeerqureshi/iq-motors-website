@@ -218,12 +218,34 @@ production unnoticed.
 
 ## ♻ Keep the Supabase project awake
 
-Free-tier Supabase projects auto-pause after ~7 days of inactivity. The
-workflow in [`.github/workflows/keep-supabase-alive.yml`](.github/workflows/keep-supabase-alive.yml)
-pings the API weekly. To use it, add these **Actions secrets**:
+Free-tier Supabase projects auto-pause after ~7 days without API activity, which
+takes the live inventory and the admin portal down with it.
+[`.github/workflows/keep-supabase-alive.yml`](.github/workflows/keep-supabase-alive.yml)
+pings a read-only REST endpoint **twice a week** (Mon + Thu, 06:00 UTC) — twice,
+because GitHub can delay scheduled runs by hours and a paused project is a
+production outage.
 
-- `SUPABASE_URL` → `https://<project-ref>.supabase.co`
-- `SUPABASE_ANON_KEY` → your anon key
+Secrets live under **Settings → Secrets and variables → Actions**; the workflow
+accepts either naming convention:
+
+- `VITE_SUPABASE_URL` (preferred — same value as Vercel) or `SUPABASE_URL` → `https://<project-ref>.supabase.co`
+- `VITE_SUPABASE_ANON_KEY` (preferred) or `SUPABASE_ANON_KEY` → your anon key
+
+⚠️ **Paste secret values with no trailing newline.** Browsers strip tab/newline
+characters out of URLs, so a value stored as `https://xyz.supabase.co\n` still
+works on the deployed site — but `curl` refuses it with
+`curl: (3) URL rejected: Malformed input to a URL function`, which is precisely
+how this workflow used to fail on every run. The job now trims whitespace itself,
+but the stored value should be clean anyway.
+
+The job fails loudly (with a `::error::` annotation) when the project is
+unreachable (HTTP `000`), the key was rotated (`401`/`403`) or the URL is wrong
+(`404`). To recover: open Supabase → *Project Settings → General* and resume the
+project, then re-run the workflow from the Actions tab (*Run workflow*) — no commit
+needed.
+
+> GitHub disables scheduled workflows after ~60 days without repository activity.
+> If the pings stop, open the Actions tab and re-enable the workflow.
 
 ## 🧭 Routes
 
