@@ -16,10 +16,15 @@ export const useStockList = () => {
       setStockLoading(true);
       setStockError(null);
 
+      // `is_available` can be NULL on rows created before the column existed, and
+      // NULL matches neither `true` nor `false` - which made those cars invisible
+      // on /stock *and* /sold. Treat anything that is not explicitly false as
+      // available, matching the admin panel (and sql/enable_rls.sql backs the
+      // column with a `true` default).
       const { data: stock_list, error } = await supabase
         .from("stock_list")
         .select("*")
-        .eq("is_available", true)
+        .or("is_available.is.null,is_available.eq.true")
         .order("created_at", { ascending: false });
 
       if (error) throw error;

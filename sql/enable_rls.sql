@@ -2,6 +2,13 @@
 -- IQ Motors Limited – Supabase hardening migration
 -- Fixes: RLS disabled on public tables (Advisor CRITICAL findings)
 --        missing admin_users table (blocked the new admin login flow)
+--        RLS-silenced UPDATE/DELETE writes (admin "Mark Sold" / "Save Changes"
+--        failed with "the server did not allow this change")
+--
+-- RELATED FILES
+--   sql/diagnose_admin_writes.sql – read-only queries that show the live policy
+--                                   state and explain the failure symptoms
+--   sql/storage_policies.sql      – `car-images` bucket + admin upload policies
 --
 -- HOW TO RUN:
 --   1. Supabase Dashboard -> SQL Editor -> New query
@@ -27,6 +34,18 @@ create table if not exists public.admin_users (
 -- ---------------------------------------------------------------------------
 alter table public.stock_list alter column created_at set default now();
 alter table public.happy_customers alter column created_at set default now();
+
+-- ---------------------------------------------------------------------------
+-- 2b. `is_available` must never be NULL, or the row disappears
+--     NULL matches neither "available" (is_available = true) nor "sold"
+--     (is_available = false), so the row shows up in neither public list and in
+--     neither admin tab. Rows created before the column existed are NULL, and
+--     an insert that omits the column would be NULL too - hence the default.
+-- ---------------------------------------------------------------------------
+update public.stock_list set is_available = true where is_available is null;
+alter table public.stock_list alter column is_available set default true;
+-- Optional extra hardening once you are happy with the data:
+-- alter table public.stock_list alter column is_available set not null;
 
 -- ---------------------------------------------------------------------------
 -- 3. Enable Row Level Security
@@ -74,11 +93,20 @@ create policy "Admins can insert stock"
   to authenticated
   with check (public.is_admin());
 
+-- NOTE: an UPDATE policy needs BOTH expressions spelled out.
+--   using (...)       -> which rows the admin may target
+--   with check (...)  -> what the new row must look like afterwards
+-- When USING is missing/does not match, Postgres silently updates 0 rows and
+-- PostgREST still reports success, so the admin UI showed a green "Vehicle
+-- updated" (or "Moved to Sold") while nothing persisted - and it is also why
+-- "Mark Sold" / "Save Changes" can fail with the "server did not allow this
+-- change" error. State both explicitly.
 drop policy if exists "Admins can update stock" on public.stock_list;
 create policy "Admins can update stock"
   on public.stock_list
   for update
   to authenticated
+  using (public.is_admin())
   with check (public.is_admin());
 
 drop policy if exists "Admins can delete stock" on public.stock_list;
@@ -127,7 +155,20 @@ create policy "Admins can update own row"
   on public.admin_users
   for update
   to authenticated
-  using (lower(email) = lower(auth.jwt() ->> 'email'));
+  using (lower(email) = lower(auth.jwt() ->> 'email'))
+  with check (lower(email) = lower(auth.jwt() ->> 'email'));
+
+-- ============================================================================
+-- VERIFY (optional, read-only)
+-- Every policy created above should be listed. If stock_list is missing an
+-- UPDATE or DELETE policy, this script did not finish running: re-run it.
+-- sql/diagnose_admin_writes.sql explains what each row means.
+-- ============================================================================
+select tablename, policyname, cmd, qual, with_check
+from pg_policies
+where schemaname = 'public'
+  and tablename in ('stock_list', 'happy_customers', 'admin_users')
+order by tablename, cmd, policyname;
 
 -- ============================================================================
 -- SETUP-ADMIN (run AFTER the above)

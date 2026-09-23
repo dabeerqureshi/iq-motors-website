@@ -6,9 +6,13 @@ import { componentTagger } from "lovable-tagger";
 // Vite inlines every VITE_* value into the bundle at BUILD time, so a missing
 // variable silently becomes `undefined` at runtime - which is how this site once
 // shipped a blank white page (the Supabase client threw "supabaseUrl is
-// required." before React could mount). On Vercel a missing variable now fails
-// the build; locally it only warns so `npm run build` still works without
-// credentials (CI supplies placeholders).
+// required." before React could mount). That failure mode is now handled at
+// runtime instead: src/supabase/supabase.js falls back to a placeholder client,
+// main.tsx wraps the app in an ErrorBoundary, index.html shows a reload /
+// phone-number guard and ContactForm tells visitors to call. A missing variable
+// is therefore reported loudly here, but never aborts the build - doing that
+// once failed every Preview deployment (they legitimately build without
+// Production credentials) and blocked unrelated fixes from shipping.
 const REQUIRED_ENV = [
   "VITE_SUPABASE_URL",
   "VITE_SUPABASE_ANON_KEY",
@@ -24,19 +28,24 @@ export default defineConfig(({ mode }) => {
   const missing = REQUIRED_ENV.filter((key) => !isSet(key));
 
   if (missing.length > 0) {
-    const message = [
+    const lines = [
       `Missing required environment variable(s): ${missing.join(", ")}`,
       "Locally: copy .env.example to .env and fill it in.",
       "On Vercel: Project -> Settings -> Environment Variables (Production,",
       "Preview and Development), then Deployments -> Redeploy - the values are",
       "inlined at build time, so an existing deployment can never pick them up.",
-    ].join("\n");
+      "The build continues: inventory, the contact form and the admin dashboard",
+      "fall back to their empty / call-us states until the variables are set.",
+    ];
 
-    if (process.env.VERCEL === "1") {
-      throw new Error(message);
+    console.warn(`\n[env] ${lines.join("\n")}\n`);
+
+    // Vercel and GitHub Actions render these as annotations in the build log.
+    if (process.env.VERCEL || process.env.CI) {
+      for (const line of lines) {
+        console.warn(`::warning title=Missing environment variable::${line}`);
+      }
     }
-
-    console.warn(`\n[env] ${message}\n`);
   }
 
   return {
