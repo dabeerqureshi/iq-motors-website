@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ContactForm from "@/components/ContactForm";
@@ -15,6 +16,12 @@ import {
 } from "lucide-react";
 
 const Servicing = () => {
+  useEffect(() => {
+    document.title = "Mercedes-Benz Servicing, Diagnostics & MOT | IQ Motors Limited";
+    return () => {
+      document.title = "IQ Motors Limited | Mercedes-Benz Specialists in Ealing, London";
+    };
+  }, []);
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
@@ -242,7 +249,7 @@ const Servicing = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
               <div>
                 <h2 className="text-2xl font-bold mb-6">Send Us a Message</h2>
-                <ContactForm />
+                <ContactForm defaultEnquiryType="servicing" />
               </div>
               <div>
                 <h2 className="text-2xl font-bold mb-6">Contact Information</h2>

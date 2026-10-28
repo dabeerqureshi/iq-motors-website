@@ -61,7 +61,7 @@ const Admin = () => {
         </div>
 
         <div className="container mx-auto px-4 py-8">
-          <Tabs defaultValue="dashboard" className="w-full">
+          <Tabs defaultValue="stock" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="stock" className="flex items-center gap-2">
                 <Package className="w-4 h-4" />

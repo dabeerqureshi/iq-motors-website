@@ -15,10 +15,15 @@ import {
   Mail,
   CheckCircle2,
   XCircle,
+  MessageCircle,
+  FileCheck2,
+  CalendarCheck,
+  ShieldCheck,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import CarImageGallery from "@/components/CarImageGallery";
 import AnimatedSection from "@/components/AnimatedSection";
+import FinanceCalculator from "@/components/FinanceCalculator";
 import { supabase } from "@/supabase/supabase";
 
 interface StockListItem {
@@ -41,7 +46,7 @@ const convertToCar = (item: StockListItem): Car => ({
   year: Number(item.year),
   price: Number(item.price),
   description: item.description || "",
-  imageUrl: item.image_url || [],
+  imageUrl: Array.isArray(item.image_url) ? item.image_url : [],
   mileage: parseInt((item.miles_driven || "0").replace(/,/g, "")) || 0,
   features: item.attributes || [],
   isSold: !item.is_available,
@@ -69,7 +74,9 @@ const CarDetail = () => {
         if (fetchError) throw fetchError;
 
         if (!cancelled && data) {
-          setCar(convertToCar(data as StockListItem));
+          const loadedCar = convertToCar(data as StockListItem);
+          setCar(loadedCar);
+          document.title = `${loadedCar.title} | IQ Motors Limited`;
         }
       } catch (err) {
         console.error("Error fetching car:", err);
@@ -81,6 +88,7 @@ const CarDetail = () => {
     fetchCar();
     return () => {
       cancelled = true;
+      document.title = "IQ Motors Limited | Mercedes-Benz Specialists in Ealing, London";
     };
   }, [id]);
 
@@ -97,25 +105,26 @@ const CarDetail = () => {
     : "";
 
   const enquirySubject = encodeURIComponent(
-    `Enquiry about ${car?.title ?? "a vehicle"}`
+    `Enquiry about ${car?.title ?? "a vehicle"} (Ref: #${car?.id})`
   );
   const enquiryBody = encodeURIComponent(
-    `Hello IQ Motors,\n\nI would like to know more about the ${
+    `Hello IQ Motors,\n\nI would like to enquire about the ${
       car?.title ?? "vehicle"
-    } listed on your website.\n\nName:\nPhone:\nMessage:`
+    } listed on your website (Price: ${formattedPrice}).\n\nName:\nPhone:\nPreferred Viewing Time:`
   );
 
-
-
-
+  const whatsappMessage = encodeURIComponent(
+    `Hello IQ Motors, I am interested in the ${car?.title ?? "vehicle"} (Ref: #${car?.id}) listed for ${formattedPrice}. Is it still available for a viewing?`
+  );
 
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col">
         <Navbar />
-        <main className="flex-grow flex items-center justify-center">
-          <div className="animate-pulse-slow text-lg text-gray-600">
-            Loading vehicle...
+        <main className="flex-grow flex items-center justify-center py-24">
+          <div className="text-center space-y-3">
+            <div className="w-10 h-10 border-4 border-cardealer-primary border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-gray-600 font-medium">Loading vehicle details...</p>
           </div>
         </main>
         <Footer />
@@ -127,15 +136,14 @@ const CarDetail = () => {
     return (
       <div className="min-h-screen flex flex-col">
         <Navbar />
-        <main className="flex-grow flex items-center justify-center">
-          <div className="text-center px-4">
-            <h1 className="text-4xl font-bold mb-4">Vehicle Not Found</h1>
-            <p className="text-xl text-gray-600 mb-6">
-              We couldn't find the vehicle you're looking for. It may have been
-              sold, removed, or our inventory is temporarily unavailable.
+        <main className="flex-grow flex items-center justify-center py-20">
+          <div className="text-center px-4 max-w-md">
+            <h1 className="text-3xl font-bold mb-3 text-gray-900">Vehicle Not Found</h1>
+            <p className="text-gray-600 mb-6 text-sm">
+              We couldn't find the vehicle you're looking for. It may have been sold, removed, or our inventory is updating.
             </p>
-            <Button asChild>
-              <Link to="/stock">Browse Our Inventory</Link>
+            <Button asChild className="bg-cardealer-primary hover:bg-cardealer-secondary">
+              <Link to="/stock">Browse Our Stock List</Link>
             </Button>
           </div>
         </main>
@@ -146,202 +154,295 @@ const CarDetail = () => {
 
   const images = car.imageUrl;
 
+  // Schema.org structured data for vehicle
+  const vehicleSchema = {
+    "@context": "https://schema.org",
+    "@type": "Car",
+    "name": car.title,
+    "brand": {
+      "@type": "Brand",
+      "name": "Mercedes-Benz"
+    },
+    "model": car.model,
+    "productionDate": String(car.year),
+    "mileageFromOdometer": {
+      "@type": "QuantitativeValue",
+      "value": car.mileage,
+      "unitCode": "SMI"
+    },
+    "offers": {
+      "@type": "Offer",
+      "price": car.price,
+      "priceCurrency": "GBP",
+      "availability": car.isSold ? "https://schema.org/SoldOut" : "https://schema.org/InStock",
+      "seller": {
+        "@type": "AutoDealer",
+        "name": "IQ Motors Limited",
+        "telephone": "+447877028198"
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
 
-      <main className="flex-grow">
-        <div className="container mx-auto px-4 py-8">
-          {/* Back button */}
-          <Button variant="outline" asChild className="mb-6">
-            <Link to="/stock" className="flex items-center">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Inventory
-            </Link>
-          </Button>
+      {/* Structured data injection */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(vehicleSchema) }}
+      />
 
-          {/* Vehicle Title */}
+      <main className="flex-grow bg-gray-50/50">
+        <div className="container mx-auto px-4 py-8">
+          {/* Breadcrumb / Back button */}
+          <div className="flex items-center justify-between mb-6">
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/stock" className="flex items-center gap-1.5 text-gray-700">
+                <ArrowLeft className="h-4 w-4" />
+                Back to Inventory
+              </Link>
+            </Button>
+            <span className="text-xs text-gray-500 font-mono">Stock Ref: #{car.id}</span>
+          </div>
+
+          {/* Vehicle Title & Status */}
           <AnimatedSection variant="fade-up" className="mb-6">
-            <h1 className="text-3xl font-bold">{car.title}</h1>
-            <div className="flex items-center mt-2">
-              <Badge
-                variant={car.isSold ? "destructive" : "default"}
-                className="mr-2"
-              >
-                {car.isSold ? "SOLD" : "Available"}
-              </Badge>
-              <p className="text-gray-600">ID: {car.id}</p>
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl md:text-4xl font-extrabold text-cardealer-dark">
+                  {car.title}
+                </h1>
+                <p className="text-gray-500 text-sm mt-1">
+                  Mercedes-Benz Specialist Stock • Northfields, Ealing
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Badge
+                  variant={car.isSold ? "destructive" : "default"}
+                  className={`text-sm px-3 py-1 font-bold ${
+                    car.isSold ? "bg-red-600" : "bg-emerald-600 hover:bg-emerald-700"
+                  }`}
+                >
+                  {car.isSold ? "SOLD" : "AVAILABLE FOR SALE"}
+                </Badge>
+              </div>
             </div>
           </AnimatedSection>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left column - Image and specs */}
-            <div className="lg:col-span-2">
-              {/* Car gallery - carousel from the vehicle's Supabase images */}
+            {/* Left column - Images, specs, description */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Car gallery */}
               {images.length > 0 ? (
-                <div className="mb-6">
-                  <CarImageGallery images={images} carTitle={car.title} />
-                </div>
+                <CarImageGallery images={images} carTitle={car.title} />
               ) : (
-                <div className="rounded-lg overflow-hidden mb-6">
-                  <div className="h-80 bg-gray-200 flex items-center justify-center text-gray-500">
-                    No Image Available
+                <div className="rounded-lg overflow-hidden border bg-gray-200 h-80 flex items-center justify-center text-gray-500">
+                  No Image Available
+                </div>
+              )}
+
+              {/* Key Specs Card */}
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <h2 className="text-lg font-bold mb-4 text-cardealer-dark">
+                  Vehicle Highlights & Specifications
+                </h2>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    <div className="flex items-center gap-2 text-cardealer-primary mb-1">
+                      <Calendar className="h-4 w-4" />
+                      <span className="text-xs text-gray-500 font-medium">Year</span>
+                    </div>
+                    <p className="text-lg font-bold text-gray-900">{car.year}</p>
+                  </div>
+
+                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    <div className="flex items-center gap-2 text-cardealer-primary mb-1">
+                      <Gauge className="h-4 w-4" />
+                      <span className="text-xs text-gray-500 font-medium">Mileage</span>
+                    </div>
+                    <p className="text-lg font-bold text-gray-900">
+                      {formattedMileage ? `${formattedMileage}` : "N/A"}
+                    </p>
+                  </div>
+
+                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    <div className="flex items-center gap-2 text-cardealer-primary mb-1">
+                      <Settings className="h-4 w-4" />
+                      <span className="text-xs text-gray-500 font-medium">Model</span>
+                    </div>
+                    <p className="text-lg font-bold text-gray-900 truncate">{car.model}</p>
+                  </div>
+
+                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    <div className="flex items-center gap-2 text-emerald-600 mb-1">
+                      <ShieldCheck className="h-4 w-4" />
+                      <span className="text-xs text-gray-500 font-medium">Warranty</span>
+                    </div>
+                    <p className="text-lg font-bold text-gray-900">Available</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <h2 className="text-lg font-bold mb-3 text-cardealer-dark">
+                  Vehicle Description
+                </h2>
+                <div className="text-gray-700 leading-relaxed whitespace-pre-line text-sm md:text-base">
+                  {car.description || "Please contact our team for full vehicle history and specification."}
+                </div>
+              </div>
+
+              {/* Features Badges */}
+              {car.features.length > 0 && (
+                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                  <h2 className="text-lg font-bold mb-3 text-cardealer-dark">
+                    Key Features & Options
+                  </h2>
+                  <div className="flex flex-wrap gap-2">
+                    {car.features.map((feature, index) => (
+                      <Badge
+                        key={index}
+                        variant="outline"
+                        className="bg-gray-50 text-gray-800 text-xs py-1 px-2.5 font-medium border-gray-200"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 mr-1.5" />
+                        {feature}
+                      </Badge>
+                    ))}
                   </div>
                 </div>
               )}
 
-              <div className="bg-gray-100 rounded-lg p-6 mb-6">
-                <h2 className="text-xl font-bold mb-4">
-                  Vehicle Specifications
-                </h2>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  <div className="flex items-center">
-                    <Calendar className="h-5 w-5 mr-2 text-cardealer-primary" />
-                    <div>
-                      <p className="text-sm text-gray-600">Year</p>
-                      <p className="font-semibold">{car.year}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center">
-                    <Settings className="h-5 w-5 mr-2 text-cardealer-primary" />
-                    <div>
-                      <p className="text-sm text-gray-600">Make</p>
-                      <p className="font-semibold">{car.make}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center">
-                    <Settings className="h-5 w-5 mr-2 text-cardealer-primary" />
-                    <div>
-                      <p className="text-sm text-gray-600">Model</p>
-                      <p className="font-semibold">{car.model}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center">
-                    <Gauge className="h-5 w-5 mr-2 text-cardealer-primary" />
-                    <div>
-                      <p className="text-sm text-gray-600">Mileage</p>
-                      <p className="font-semibold">{formattedMileage} miles</p>
-                    </div>
-                  </div>
+              {/* Embedded Finance Calculator */}
+              {!car.isSold && (
+                <div>
+                  <FinanceCalculator
+                    initialPrice={car.price}
+                    vehicleTitle={car.title}
+                    vehicleId={car.id}
+                  />
                 </div>
-              </div>
-
-              <div className="bg-white rounded-lg p-6 shadow-sm mb-6">
-                <h2 className="text-xl font-bold mb-4">Description</h2>
-                <p className="text-gray-700 whitespace-pre-line">
-                  {car.description}
-                </p>
-              </div>
-
-              <div className="bg-white rounded-lg p-6 shadow-sm">
-                <h2 className="text-xl font-bold mb-4">Features</h2>
-                <div className="flex flex-wrap gap-2">
-                  {car.features.map((feature, index) => (
-                    <Badge
-                      key={index}
-                      variant="outline"
-                      className="bg-gray-100"
-                    >
-                      {feature}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
+              )}
             </div>
 
-            {/* Right column - Price and contact */}
+            {/* Right column - Price, CTA and Dealership assurances */}
             <div className="lg:col-span-1">
-              <AnimatedSection variant="slide-right" delay={150}>
-                <div className="bg-white rounded-lg p-6 shadow-sm mb-6 lg:sticky lg:top-24">
-                  <div className="mb-6">
-                    <p className="text-sm text-gray-600 mb-1">Price</p>
-                    <p className="text-3xl font-bold text-cardealer-primary">
-                      {formattedPrice}
-                    </p>
-                  </div>
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 lg:sticky lg:top-24 space-y-6">
+                <div>
+                  <span className="text-xs uppercase font-bold text-gray-500 tracking-wider">
+                    Showroom Price
+                  </span>
+                  <p className="text-3xl md:text-4xl font-extrabold text-cardealer-primary mt-1">
+                    {formattedPrice}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Competitive finance available from £{Math.round(car.price * 0.023)}/mo
+                  </p>
+                </div>
 
-                  <div className="mb-6">
-                    <h3 className="text-lg font-bold mb-2">Quick Details</h3>
-                    <ul className="space-y-2">
-                      <li className="flex items-center justify-between">
-                        <span className="text-gray-600">Status:</span>
-                        <span
-                          className={
-                            car.isSold
-                              ? "text-red-600 font-bold flex items-center"
-                              : "text-green-600 font-bold flex items-center"
-                          }
-                        >
-                          {car.isSold ? (
-                            <XCircle className="h-4 w-4 mr-1" />
-                          ) : (
-                            <CheckCircle2 className="h-4 w-4 mr-1" />
-                          )}
-                          {car.isSold ? "SOLD" : "Available"}
-                        </span>
-                      </li>
-                      <li className="flex items-center justify-between">
-                        <span className="text-gray-600">Make:</span>
-                        <span>{car.make}</span>
-                      </li>
-                      <li className="flex items-center justify-between">
-                        <span className="text-gray-600">Model:</span>
-                        <span>{car.model}</span>
-                      </li>
-                      <li className="flex items-center justify-between">
-                        <span className="text-gray-600">Year:</span>
-                        <span>{car.year}</span>
-                      </li>
-                      <li className="flex items-center justify-between">
-                        <span className="text-gray-600">Mileage:</span>
-                        <span>
-                          {formattedMileage
-                            ? `${formattedMileage} miles`
-                            : "—"}
-                        </span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  {!car.isSold && (
-                    <div>
-                      <Button
-                        asChild
-                        className="w-full mb-3 bg-cardealer-primary hover:bg-cardealer-secondary hover-lift"
+                {!car.isSold ? (
+                  <div className="space-y-3 pt-2">
+                    {/* Primary WhatsApp CTA */}
+                    <Button
+                      asChild
+                      size="lg"
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm gap-2"
+                    >
+                      <a
+                        href={`https://wa.me/447877028198?text=${whatsappMessage}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
                       >
-                        <a
-                          href={`mailto:iqmotors0@gmail.com?subject=${enquirySubject}&body=${enquiryBody}`}
-                        >
-                          <Mail className="mr-2 h-4 w-4" />
-                          Contact About This Car
-                        </a>
-                      </Button>
-                      <Button
-                        asChild
-                        variant="outline"
-                        className="w-full mb-3 border-cardealer-primary text-cardealer-primary hover:bg-cardealer-primary hover:text-white"
-                      >
-                        <a href="tel:07877028198">
-                          <Phone className="mr-2 h-4 w-4" />
-                          Call 07877 028198
-                        </a>
-                      </Button>
-                      <Button variant="outline" asChild className="w-full">
-                        <Link to="/finance" className="w-full">
-                          Finance Options
-                        </Link>
-                      </Button>
-                    </div>
-                  )}
+                        <MessageCircle className="w-5 h-5" />
+                        Chat on WhatsApp
+                      </a>
+                    </Button>
 
-                  <div className="mt-6 text-center">
-                    <p className="text-sm text-gray-600">
-                      <MapPin className="h-4 w-4 inline mr-1" />
-                      IQ Motors Limited - Ealing, London
+                    {/* Call CTA */}
+                    <Button
+                      asChild
+                      size="lg"
+                      variant="outline"
+                      className="w-full border-cardealer-primary text-cardealer-primary hover:bg-cardealer-primary hover:text-white font-semibold gap-2"
+                    >
+                      <a href="tel:07877028198">
+                        <Phone className="w-4 h-4" />
+                        Call 07877 028198
+                      </a>
+                    </Button>
+
+                    {/* Book Viewing CTA */}
+                    <Button
+                      asChild
+                      variant="secondary"
+                      className="w-full bg-blue-50 text-cardealer-primary hover:bg-blue-100 font-semibold gap-2"
+                    >
+                      <Link
+                        to={`/contact?enquiry=viewing&car=${encodeURIComponent(
+                          car.title
+                        )}&id=${car.id}`}
+                      >
+                        <CalendarCheck className="w-4 h-4" />
+                        Book Viewing / Test Drive
+                      </Link>
+                    </Button>
+
+                    {/* Email CTA */}
+                    <Button
+                      asChild
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-gray-600 hover:text-gray-900 gap-1.5"
+                    >
+                      <a
+                        href={`mailto:iqmotors0@gmail.com?subject=${enquirySubject}&body=${enquiryBody}`}
+                      >
+                        <Mail className="w-4 h-4" />
+                        Email About This Car
+                      </a>
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+                    <p className="font-bold text-red-700">This vehicle has been sold</p>
+                    <p className="text-xs text-red-600 mt-1 mb-3">
+                      We source premium Mercedes-Benz regularly. Let us find your ideal specification.
                     </p>
+                    <Button asChild size="sm" className="bg-cardealer-primary hover:bg-cardealer-secondary">
+                      <Link to="/contact?enquiry=sourcing">Request Similar Vehicle</Link>
+                    </Button>
+                  </div>
+                )}
+
+                {/* Dealer Guarantees */}
+                <div className="pt-4 border-t border-gray-100 space-y-2.5 text-xs text-gray-600">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Autotrader Award Winning Dealership 2024</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Free Delivery within 10 Miles</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Open 7 Days — Appointments Available Same Day</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>FCA Regulated Finance Broker Partners</span>
                   </div>
                 </div>
-              </AnimatedSection>
+
+                <div className="pt-4 border-t border-gray-100 text-center">
+                  <p className="text-xs text-gray-500 flex items-center justify-center gap-1">
+                    <MapPin className="h-3.5 w-3.5 text-cardealer-primary" />
+                    Northfield Avenue, Ealing, London W13 9RL
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>

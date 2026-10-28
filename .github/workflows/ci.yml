@@ -1,7 +1,7 @@
 name: CI
 
 # Vercel owns building and deploying this site (see vercel.json), so CI only
-# needs to prove that a commit is safe to merge: lint, typecheck and a real
+# needs to prove that a commit is safe to merge: lint, typecheck, test, and a real
 # production build. No deploy step and no FTP credentials live here any more.
 #
 # Runs on every pull request and on pushes to main, so a broken commit is
@@ -27,7 +27,7 @@ env:
 
 jobs:
   verify:
-    name: Lint, typecheck & build
+    name: Lint, typecheck, test & build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -48,6 +48,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Test
+        run: npm test
+
       # Production values live in the Vercel dashboard. Here we fall back to
       # placeholders so forks and PRs can still build without secrets - the
       # bundle produced in CI is never deployed.
@@ -62,7 +65,7 @@ jobs:
 
       - name: Check build output
         run: |
-          for file in dist/index.html dist/robots.txt dist/sitemap.xml; do
+          for file in dist/index.html dist/robots.txt dist/sitemap.xml dist/ads.txt; do
             if [ ! -f "$file" ]; then
               echo "::error::Expected build artifact is missing: $file"
               exit 1

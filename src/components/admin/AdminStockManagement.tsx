@@ -1,13 +1,13 @@
-import { useState, useEffect, useRef } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2, Plus, Search, Upload, X, Image as ImageIcon } from "lucide-react";
+import { Trash2, Search, Upload, X, CheckCircle, RefreshCw } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
@@ -36,12 +36,19 @@ const AdminStockManagement = () => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [deleteLoadingId, setDeleteLoadingId] = useState<string | null>(null);
+  const [toggleLoadingId, setToggleLoadingId] = useState<string | null>(null);
   const [uploadLoading, setUploadLoading] = useState(false);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
-    title: "", price: "", year: "", miles_driven: "", description: "", attributes: "", is_available: true,
+    title: "",
+    price: "",
+    year: "",
+    miles_driven: "",
+    description: "",
+    attributes: "",
+    is_available: true,
   });
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
@@ -80,7 +87,7 @@ const AdminStockManagement = () => {
     for (const file of selectedFiles) {
       const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
       const path = 'car-images/' + Date.now() + '-' + Math.random().toString(36).slice(2) + '.' + ext;
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from('car-images')
         .upload(path, file, { contentType: file.type, upsert: false });
       if (error) {
@@ -93,6 +100,26 @@ const AdminStockManagement = () => {
     setUploadLoading(false);
     return urls;
   };
+
+  const fetchStockItems = useCallback(async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('stock_list')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setStockItems((data ?? []) as stock_list[]);
+    } catch (e) {
+      toast({ title: 'Fetch failed', description: (e as Error).message || 'Could not load stock', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    fetchStockItems();
+  }, [fetchStockItems]);
 
   const handleAddCar = async () => {
     if (!formData.title || !formData.price || !formData.year) {
@@ -114,7 +141,7 @@ const AdminStockManagement = () => {
       };
       const { error } = await supabase.from('stock_list').insert([car]).select();
       if (error) throw error;
-      toast({ title: 'Car added', description: formData.title + ' has been listed successfully', variant: 'default' });
+      toast({ title: 'Car added', description: formData.title + ' has been listed successfully' });
       setIsAddDialogOpen(false);
       setFormData({ title: '', price: '', year: '', miles_driven: '', description: '', attributes: '', is_available: true });
       setSelectedFiles([]);
@@ -127,21 +154,29 @@ const AdminStockManagement = () => {
     }
   };
 
-  const fetchStockItems = async () => {
+  const handleToggleAvailability = async (id: string, currentStatus: boolean) => {
+    setToggleLoadingId(id);
     try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('stock_list').select('*').order('created_at', { ascending: false });
+      const { error } = await supabase
+        .from('stock_list')
+        .update({ is_available: !currentStatus })
+        .eq('id', id);
       if (error) throw error;
-      setStockItems((data ?? []) as stock_list[]);
+      toast({
+        title: 'Status Updated',
+        description: `Vehicle marked as ${!currentStatus ? 'Available for sale' : 'Sold'}`,
+      });
+      fetchStockItems();
     } catch (e) {
-      toast({ title: 'Fetch failed', description: (e as Error).message || 'Could not load stock', variant: 'destructive' });
+      toast({
+        title: 'Update failed',
+        description: (e as Error).message || 'Could not update vehicle status',
+        variant: 'destructive',
+      });
     } finally {
-      setLoading(false);
+      setToggleLoadingId(null);
     }
   };
-
-  useEffect(() => { fetchStockItems(); }, []);
 
   const handleDeleteCar = async (id: string) => {
     if (!window.confirm('Delete this vehicle? This cannot be undone.')) return;
@@ -149,7 +184,7 @@ const AdminStockManagement = () => {
     try {
       const { error } = await supabase.from('stock_list').delete().eq('id', id);
       if (error) throw error;
-      toast({ title: 'Deleted', description: 'Vehicle removed', variant: 'default' });
+      toast({ title: 'Deleted', description: 'Vehicle removed' });
       fetchStockItems();
     } catch (e) {
       toast({ title: 'Delete failed', description: (e as Error).message || 'Could not delete vehicle', variant: 'destructive' });
@@ -162,37 +197,70 @@ const AdminStockManagement = () => {
   const soldCars = stockItems.filter(c => !c.is_available && (!searchTerm || c.title.toLowerCase().includes(searchTerm.toLowerCase())));
 
   const renderTable = (cars: stock_list[], showAvail: boolean) => {
-    if (loading) return (  <div className='space-y-4 py-8'><Skeleton className='h-6 w-full' /><Skeleton className='h-6 w-3/4' /><Skeleton className='h-6 w-1/2' /></div>);
+    if (loading) return (
+      <div className='space-y-4 py-8'>
+        <Skeleton className='h-6 w-full' />
+        <Skeleton className='h-6 w-3/4' />
+        <Skeleton className='h-6 w-1/2' />
+      </div>
+    );
 
     if (cars.length === 0)
-      return (  <p className='text-center text-gray-500 py-10'>{showAvail ? 'No available cars' : 'No sold cars'}</p>);
+      return (
+        <p className='text-center text-gray-500 py-10'>{showAvail ? 'No available cars found' : 'No sold cars found'}</p>
+      );
 
     return (
       <div className='overflow-x-auto'>
         <Table>
-          <TableHeader><TableRow><TableHead>Make / Model</TableHead><TableHead>Price</TableHead><TableHead>Year</TableHead><TableHead>Mileage</TableHead><TableHead>Available</TableHead><TableHead className='text-right'>Actions</TableHead></TableRow></TableHeader>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Make / Model</TableHead>
+              <TableHead>Price</TableHead>
+              <TableHead>Year</TableHead>
+              <TableHead>Mileage</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className='text-right'>Actions</TableHead>
+            </TableRow>
+          </TableHeader>
           <TableBody>
             {cars.map(car => (
               <TableRow key={car.id}>
                 <TableCell className='font-medium'>{car.title}</TableCell>
                 <TableCell>£{Number(car.price).toLocaleString('en-GB')}</TableCell>
                 <TableCell>{car.year}</TableCell>
-                <TableCell>{car.miles_driven} miles</TableCell>
+                <TableCell>{car.miles_driven ? `${car.miles_driven} miles` : '—'}</TableCell>
                 <TableCell>
                   <Badge variant={car.is_available ? 'default' : 'secondary'}>
                     {car.is_available ? 'Available' : 'Sold'}
                   </Badge>
                 </TableCell>
                 <TableCell className='text-right'>
-                  <Button
-                    variant='destructive'
-                    size='sm'
-                    onClick={() => handleDeleteCar(car.id)}
-                    disabled={deleteLoadingId === car.id}
-                  >
-                    <Trash2 className='w-4 h-4 mr-1' />
-                    {deleteLoadingId === car.id ? 'Deleting...' : 'Delete'}
-                  </Button>
+                  <div className='flex items-center justify-end gap-2'>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => handleToggleAvailability(car.id, car.is_available)}
+                      disabled={toggleLoadingId === car.id}
+                      title={car.is_available ? 'Mark as Sold' : 'Mark as Available'}
+                    >
+                      {toggleLoadingId === car.id ? (
+                        <RefreshCw className='w-3.5 h-3.5 animate-spin mr-1' />
+                      ) : (
+                        <CheckCircle className='w-3.5 h-3.5 mr-1 text-emerald-600' />
+                      )}
+                      {car.is_available ? 'Mark Sold' : 'Relist'}
+                    </Button>
+                    <Button
+                      variant='destructive'
+                      size='sm'
+                      onClick={() => handleDeleteCar(car.id)}
+                      disabled={deleteLoadingId === car.id}
+                    >
+                      <Trash2 className='w-4 h-4 mr-1' />
+                      {deleteLoadingId === car.id ? 'Deleting...' : 'Delete'}
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -204,11 +272,17 @@ const AdminStockManagement = () => {
 
   return (
     <Card className='bg-cardealer-surface text-cardealer-dark shadow-lg border border-cardealer-secondary'>
-      <CardHeader className='border-b border-cardealer-secondary'><CardTitle className='text-xl'>Admin Stock Panel</CardTitle></CardHeader>
-      <CardContent>
+      <CardHeader className='border-b border-cardealer-secondary flex flex-row items-center justify-between'>
+        <CardTitle className='text-xl'>Admin Stock Panel</CardTitle>
+        <Button variant='outline' size='sm' onClick={fetchStockItems} disabled={loading}>
+          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
+      </CardHeader>
+      <CardContent className='pt-6'>
         <div className='flex items-center flex-wrap gap-2 mb-4'>
           <Search className='w-4 h-4 text-gray-400' />
-          <Input placeholder='Search cars...' className='max-w-sm' value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          <Input placeholder='Search cars by model or keyword...' className='max-w-sm' value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
         </div>
 
         <Tabs defaultValue={'available'} className='w-full'>
@@ -217,29 +291,33 @@ const AdminStockManagement = () => {
             <TabsTrigger value={'sold'}>{soldCars.length} Sold</TabsTrigger>
           </TabsList>
 
-          <TabsContent value={'available'}>
+          <TabsContent value={'available'} className='mt-4'>
             {renderTable(availableCars, true)}
           </TabsContent>
-          <TabsContent value={'sold'}>
+          <TabsContent value={'sold'} className='mt-4'>
             {renderTable(soldCars, false)}
           </TabsContent>
         </Tabs>
 
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild><Button className='mt-4'>Add Vehicle</Button></DialogTrigger>
+          <DialogTrigger asChild>
+            <Button className='mt-6 bg-cardealer-primary hover:bg-cardealer-secondary'>Add New Vehicle</Button>
+          </DialogTrigger>
           <DialogContent className='bg-cardealer-surface text-cardealer-dark sm:max-w-2xl max-h-[90vh] overflow-y-auto'>
-            <DialogHeader><DialogTitle className='text-cardealer-dark'>Add New Vehicle</DialogTitle></DialogHeader>
-            <div className='grid gap-3 sm:grid-cols-2'>
+            <DialogHeader>
+              <DialogTitle className='text-cardealer-dark'>Add New Vehicle to Inventory</DialogTitle>
+            </DialogHeader>
+            <div className='grid gap-3 sm:grid-cols-2 mt-2'>
               <div className='space-y-2'>
-                <Label htmlFor='title'>Make / Model</Label>
-                <Input id='title' placeholder='Mercedes-Benz C-Class' value={formData.title} onChange={e => setFormData(prev => ({ ...prev, title: e.target.value }))} />
+                <Label htmlFor='title'>Make / Model *</Label>
+                <Input id='title' placeholder='Mercedes-Benz C-Class C220d AMG Line' value={formData.title} onChange={e => setFormData(prev => ({ ...prev, title: e.target.value }))} />
               </div>
               <div className='space-y-2'>
-                <Label htmlFor='price'>Price (£)</Label>
+                <Label htmlFor='price'>Price (£) *</Label>
                 <Input id='price' type='number' placeholder='25000' value={formData.price} onChange={e => setFormData(prev => ({ ...prev, price: e.target.value }))} />
               </div>
               <div className='space-y-2'>
-                <Label htmlFor='year'>Year</Label>
+                <Label htmlFor='year'>Year *</Label>
                 <Input id='year' type='number' placeholder='2020' value={formData.year} onChange={e => setFormData(prev => ({ ...prev, year: e.target.value }))} />
               </div>
               <div className='space-y-2'>
@@ -248,24 +326,24 @@ const AdminStockManagement = () => {
               </div>
               <div className='space-y-2 sm:col-span-2'>
                 <Label htmlFor='desc'>Description</Label>
-                <Textarea id='desc' placeholder='AutoTrader award winner...' value={formData.description} onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))} />
+                <Textarea id='desc' placeholder='High specification Mercedes-Benz with full service history, panoramic roof, navigation...' value={formData.description} onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))} />
               </div>
               <div className='space-y-2 sm:col-span-2'>
                 <Label htmlFor='attrs'>Features (comma separated)</Label>
-                <Input id='attrs' placeholder='Leather seats, navigation, w205 estate' value={formData.attributes} onChange={e => setFormData(prev => ({ ...prev, attributes: e.target.value }))} />
+                <Input id='attrs' placeholder='Leather seats, Panoramic roof, Apple CarPlay, Heated seats' value={formData.attributes} onChange={e => setFormData(prev => ({ ...prev, attributes: e.target.value }))} />
               </div>
             </div>
 
             <div className='mt-4 border-t pt-4'>
               <Label htmlFor='files'>Vehicle Images</Label>
-              <p className='text-sm text-gray-500 mb-2'>Select JPEG/PNG/WebP, max 5MB each. Uploaded to your Supabase Storage (car-images bucket).</p>
+              <p className='text-sm text-gray-500 mb-2'>Select JPEG/PNG/WebP, max 5MB each. Uploaded to your Supabase Storage bucket.</p>
 
               {previewUrls.length > 0 && (
                 <div className='flex flex-wrap gap-3 mb-3'>
                   {previewUrls.map((url, i) => (
-                    <div key={i} className='relative inline-block w-24 h-24 rounded overflow-hidden bg-gray-200'>
-                      <img src={url} alt={('preview ' + i) + ''} className='w-full h-full object-cover' />
-                      <button type='button' className='absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center' onClick={() => removePreview(i)} aria-label='Remove image'>
+                    <div key={i} className='relative inline-block w-24 h-24 rounded overflow-hidden bg-gray-200 border'>
+                      <img src={url} alt={`preview ${i}`} className='w-full h-full object-cover' />
+                      <button type='button' className='absolute top-1 right-1 bg-black/60 hover:bg-black text-white rounded-full w-5 h-5 flex items-center justify-center' onClick={() => removePreview(i)} aria-label='Remove image'>
                         <X className='w-3 h-3' />
                       </button>
                     </div>
@@ -282,26 +360,26 @@ const AdminStockManagement = () => {
                   ref={fileInputRef}
                   onChange={handleSelectedFilesChange}
                 />
-                <Button variant='outline' id='add-images-btn' onClick={() => fileInputRef.current?.click()}>
+                <Button variant='outline' type='button' onClick={() => fileInputRef.current?.click()}>
                   <Upload className='w-4 h-4 mr-2' /> Add Images
                 </Button>
                 {previewUrls.length > 0 && (
-                  <Button variant='ghost' id='clear-images-btn' onClick={() => { setPreviewUrls([]); setSelectedFiles([]); }}>
-                    <X className='w-4 h-4 mr-2' /> Clear
+                  <Button variant='ghost' type='button' onClick={() => { setPreviewUrls([]); setSelectedFiles([]); }}>
+                    <X className='w-4 h-4 mr-2' /> Clear All
                   </Button>
                 )}
               </div>
             </div>
 
-            <div className='flex items-center space-x-3 mt-3'>
+            <div className='flex items-center space-x-3 mt-4'>
               <Switch id='avail' checked={formData.is_available} onCheckedChange={checked => setFormData(prev => ({ ...prev, is_available: checked }))} />
-              <Label htmlFor='avail'>Available for sale</Label>
+              <Label htmlFor='avail'>Available for sale immediately</Label>
             </div>
 
-            <div className='flex justify-end gap-2 mt-5'>
-              <Button variant='outline' onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleAddCar} disabled={uploadLoading}>
-                {uploadLoading ? <span className='flex items-center gap-2'><span className='animate-pulse w-4 h-4 bg-gray-300 rounded-full' />Saving</span> : 'Add Vehicle'}
+            <div className='flex justify-end gap-2 mt-6'>
+              <Button variant='outline' type='button' onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleAddCar} disabled={uploadLoading} className='bg-cardealer-primary hover:bg-cardealer-secondary'>
+                {uploadLoading ? <span className='flex items-center gap-2'><RefreshCw className='w-4 h-4 animate-spin' />Saving...</span> : 'Add Vehicle'}
               </Button>
             </div>
           </DialogContent>
