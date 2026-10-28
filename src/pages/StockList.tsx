@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import CarCard from "@/components/CarCard";
@@ -15,18 +15,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Search, RotateCcw, Car as CarIcon, SlidersHorizontal, Phone, MessageCircle } from "lucide-react";
+import { Search, RotateCcw, Car as CarIcon, Phone, MessageCircle } from "lucide-react";
 import AnimatedSection from "@/components/AnimatedSection";
+import { useSeo, pageSeo } from "@/lib/seo";
 
 const StockList = () => {
   const { stockItems, loading, error } = useStockList();
-
-  useEffect(() => {
-    document.title = "Current Mercedes-Benz Stock | IQ Motors Limited";
-    return () => {
-      document.title = "IQ Motors Limited | Mercedes-Benz Specialists in Ealing, London";
-    };
-  }, []);
 
   const allCars = useMemo(() => {
     return [...stockItems];
@@ -49,6 +43,12 @@ const StockList = () => {
 
   const hasActiveFilters =
     searchTerm !== "" || sortOption !== "featured" || priceRange !== "all";
+
+  useSeo(
+    pageSeo("/stock", {
+      cars: stockItems.map((car) => ({ id: car.id, title: car.title })),
+    })
+  );
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -144,7 +144,11 @@ const StockList = () => {
             {/* Results summary bar */}
             {!loading && !error && (
               <div className="flex flex-wrap items-center justify-between gap-4 mb-6 text-sm text-gray-600">
-                <p className="flex items-center gap-2 font-medium">
+                <p
+                  className="flex items-center gap-2 font-medium"
+                  role="status"
+                  aria-live="polite"
+                >
                   <CarIcon className="h-4 w-4 text-cardealer-primary" />
                   Showing{" "}
                   <span className="font-bold text-gray-900">
@@ -198,11 +202,15 @@ const StockList = () => {
                   Inventory Updating
                 </h3>
                 <p className="text-sm mb-6">
-                  Our live stock is momentarily syncing. Please call our sales desk directly for immediate vehicle availability.
+                  Our live stock is momentarily syncing. Please call our showroom directly on{" "}
+                  <a href="tel:+447877028198" className="font-semibold text-cardealer-primary hover:underline">
+                    07877 028198
+                  </a>{" "}
+                  for immediate vehicle availability.
                 </p>
                 <div className="flex justify-center gap-3">
                   <Button asChild className="bg-cardealer-primary hover:bg-cardealer-secondary">
-                    <a href="tel:07877028198">
+                    <a href="tel:+447877028198">
                       <Phone className="w-4 h-4 mr-2" />
                       Call 07877 028198
                     </a>
@@ -210,7 +218,7 @@ const StockList = () => {
                 </div>
               </div>
             ) : filteredCars.length === 0 ? (
-              <EmptyStockList resetFilters={resetFilters} />
+              <EmptyStockList resetFilters={hasActiveFilters ? resetFilters : undefined} />
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {currentItems.map((car, index) => (
@@ -222,7 +230,7 @@ const StockList = () => {
             )}
 
             {/* Pagination */}
-            {totalPages > 1 && (
+            {!loading && !error && totalPages > 1 && (
               <div className="mt-12">
                 <StockListPagination
                   currentPage={currentPage}

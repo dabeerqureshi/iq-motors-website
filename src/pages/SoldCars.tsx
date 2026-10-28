@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import CarCard from "@/components/CarCard";
@@ -7,16 +6,12 @@ import AnimatedSection from "@/components/AnimatedSection";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { Phone, ArrowRight } from "lucide-react";
+import { useSeo, pageSeo } from "@/lib/seo";
 
 const SoldCars = () => {
   const { soldCars, soldLoading: loading, soldError: error } = useStockList();
 
-  useEffect(() => {
-    document.title = "Recently Sold Mercedes-Benz | IQ Motors Limited";
-    return () => {
-      document.title = "IQ Motors Limited | Mercedes-Benz Specialists in Ealing, London";
-    };
-  }, []);
+  useSeo(pageSeo("/sold"));
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -62,7 +57,7 @@ const SoldCars = () => {
                 </h3>
                 <p className="text-sm mb-4">
                   Please check back shortly or call our showroom directly on{" "}
-                  <a href="tel:07877028198" className="font-semibold text-cardealer-primary hover:underline">
+                  <a href="tel:+447877028198" className="font-semibold text-cardealer-primary hover:underline">
                     07877 028198
                   </a>
                   .
@@ -103,7 +98,7 @@ const SoldCars = () => {
                   </Link>
                 </Button>
                 <Button asChild variant="outline">
-                  <a href="tel:07877028198">
+                  <a href="tel:+447877028198">
                     <Phone className="w-4 h-4 mr-2" />
                     Call 07877 028198
                   </a>

@@ -16,16 +16,30 @@ import {
   LogOut,
   Package,
   Heart,
+  ExternalLink,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useSeo } from "@/lib/seo";
+import { Link } from "react-router-dom";
 
 const Admin = () => {
   const { isAdmin, logout, loading } = useAuth();
 
+  // Admin pages must never be indexed (they are also excluded from the sitemap).
+  useSeo({
+    title: "Admin | IQ Motors Limited",
+    description: "Private admin area for IQ Motors Limited.",
+    path: "/admin-IQmotors",
+    noindex: true,
+    schema: [],
+  });
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg">Loading...</div>
+        <div className="text-lg" role="status">
+          Loading...
+        </div>
       </div>
     );
   }
@@ -41,21 +55,33 @@ const Admin = () => {
       <main className="flex-grow bg-gray-50">
         <div className="bg-cardealer-primary text-white py-8">
           <div className="container mx-auto px-4">
-            <div className="flex justify-between items-center">
+            <div className='flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4'>
               <div>
-                <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
-                <p className="text-xl opacity-90">
+                <h1 className="text-2xl sm:text-3xl font-bold mb-2">Admin Dashboard</h1>
+                <p className="text-lg sm:text-xl opacity-90">
                   Manage your dealership operations
                 </p>
               </div>
-              <Button
-                variant="outline"
-                onClick={logout}
-                className="bg-white text-cardealer-primary hover:bg-gray-100 flex items-center gap-2"
-              >
-                <LogOut className="w-4 h-4" />
-                Logout
-              </Button>
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                <Button
+                  variant="outline"
+                  asChild
+                  className="bg-transparent text-white border-white/70 hover:bg-white/10 flex items-center gap-2 justify-center"
+                >
+                  <Link to="/">
+                    <ExternalLink className="w-4 h-4" />
+                    View site
+                  </Link>
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={logout}
+                  className="bg-white text-cardealer-primary hover:bg-gray-100 flex items-center gap-2 justify-center"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Logout
+                </Button>
+              </div>
             </div>
           </div>
         </div>

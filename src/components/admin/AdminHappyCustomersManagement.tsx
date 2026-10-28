@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   Card,
   CardContent,
@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useHappyCustomers } from "@/hooks/useHappyCustomers";
-import { Plus, Trash2, ExternalLink } from "lucide-react";
+import { Plus, Trash2, ExternalLink, Upload, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -20,53 +20,105 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { removeStorageUrls, uploadImages } from "@/supabase/storage";
+
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
+const ALLOWED_FILE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
 
 const AdminHappyCustomersManagement = () => {
   const { customers, loading, addCustomer, deleteCustomer } =
     useHappyCustomers();
-  const [newImageUrl, setNewImageUrl] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteLoadingId, setDeleteLoadingId] = useState<string | number | null>(
     null
   );
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const resetSelectedFile = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!ALLOWED_FILE_TYPES.includes(file.type) || file.size > MAX_FILE_SIZE) {
+      toast({
+        title: "Invalid file",
+        description: "Only JPEG/PNG/WebP images under 5MB are allowed",
+        variant: "destructive",
+      });
+      e.target.value = "";
+      return;
+    }
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setSelectedFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+    // Allow picking the same file again in a later selection.
+    e.target.value = "";
+  };
 
   const handleAddCustomer = async () => {
-    if (!newImageUrl.trim()) {
+    if (!selectedFile) {
       toast({
         title: "Error",
-        description: "Please enter a valid image URL",
+        description: "Please choose a photo to upload",
         variant: "destructive",
       });
       return;
     }
 
     setIsSubmitting(true);
-    const { error } = await addCustomer(newImageUrl.trim());
+    let uploadedPath: string | null = null;
+    try {
+      const [uploaded] = await uploadImages([selectedFile], "happy-customers");
+      if (!uploaded) throw new Error("The upload did not return a file URL");
+      uploadedPath = uploaded.path;
 
-    if (error) {
-      toast({
-        title: "Error",
-        description: error,
-        variant: "destructive",
-      });
-    } else {
+      const { error } = await addCustomer(uploaded.url);
+      if (error) throw new Error(error);
+
       toast({
         title: "Success",
         description: "Happy customer added successfully",
       });
-      setNewImageUrl("");
+      resetSelectedFile();
       setIsAddDialogOpen(false);
+    } catch (e) {
+      // The row was not created, so remove the uploaded photo instead of
+      // leaving an orphaned file in the bucket.
+      if (uploadedPath) {
+        await removeStorageUrls([uploadedPath]);
+      }
+      toast({
+        title: "Error",
+        description: (e as Error).message || "Failed to add customer",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
-  const handleDeleteCustomer = async (id: string | number) => {
-    if (!window.confirm("Are you sure you want to delete this customer image? This action cannot be undone.")) {
+  const handleDeleteCustomer = async (customer: {
+    id: string | number;
+    image_url: string;
+  }) => {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this customer image? This action cannot be undone."
+      )
+    ) {
       return;
     }
 
+    const { id, image_url } = customer;
     setDeleteLoadingId(id);
 
     const { error } = await deleteCustomer(id);
@@ -78,6 +130,8 @@ const AdminHappyCustomersManagement = () => {
         variant: "destructive",
       });
     } else {
+      // Row deleted: drop the photo from storage too (best effort).
+      await removeStorageUrls([image_url]);
       toast({
         title: "Success",
         description: "Happy customer deleted successfully",
@@ -108,7 +162,13 @@ const AdminHappyCustomersManagement = () => {
                 Manage customer images displayed on the Happy Customers page
               </CardDescription>
             </div>
-            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <Dialog
+              open={isAddDialogOpen}
+              onOpenChange={(open) => {
+                setIsAddDialogOpen(open);
+                if (!open) resetSelectedFile();
+              }}
+            >
               <DialogTrigger asChild>
                 <Button className="flex items-center gap-2">
                   <Plus className="w-4 h-4" />
@@ -119,29 +179,76 @@ const AdminHappyCustomersManagement = () => {
                 <DialogHeader>
                   <DialogTitle>Add Happy Customer Image</DialogTitle>
                   <DialogDescription>
-                    Enter the image URL for a new happy customer
+                    Upload a photo of a happy customer. It will be shown on the
+                    Happy Customers page.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div className="space-y-2">
-                    <Label htmlFor="imageUrl">Image URL</Label>
-                    <Input
-                      id="imageUrl"
-                      placeholder="https://example.com/customer-image.jpg"
-                      value={newImageUrl}
-                      onChange={(e) => setNewImageUrl(e.target.value)}
-                    />
+                    <Label htmlFor="customerPhoto">Customer Photo</Label>
+                    <p className="text-sm text-gray-500">
+                      Select a JPEG/PNG/WebP image, max 5MB. It is uploaded to
+                      Supabase Storage.
+                    </p>
+
+                    {previewUrl && (
+                      <div className="relative inline-block w-24 h-24 rounded overflow-hidden bg-gray-200 border">
+                        <img
+                          src={previewUrl}
+                          alt="Selected customer photo preview"
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center"
+                          onClick={resetSelectedFile}
+                          aria-label="Remove selected photo"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="customerPhoto"
+                        type="file"
+                        accept="image/jpeg, image/png, image/webp"
+                        className="hidden"
+                        ref={fileInputRef}
+                        onChange={handleFileSelect}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        Upload Photo
+                      </Button>
+                      {previewUrl && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={resetSelectedFile}
+                        >
+                          <X className="w-4 h-4 mr-2" />
+                          Clear
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="flex justify-end gap-2">
+                <div className="flex justify-end gap-2 flex-col-reverse sm:flex-row">
                   <Button
                     variant="outline"
                     onClick={() => setIsAddDialogOpen(false)}
+                    disabled={isSubmitting}
                   >
                     Cancel
                   </Button>
                   <Button onClick={handleAddCustomer} disabled={isSubmitting}>
-                    {isSubmitting ? "Adding..." : "Add Customer"}
+                    {isSubmitting ? "Uploading..." : "Add Customer"}
                   </Button>
                 </div>
               </DialogContent>
@@ -173,7 +280,7 @@ const AdminHappyCustomersManagement = () => {
                     </p>
                   </div>
                 </div>
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity space-x-1">
+                <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity space-x-1 top-2 right-2 absolute">
                   <Button
                     variant="outline"
                     size="sm"
@@ -186,7 +293,7 @@ const AdminHappyCustomersManagement = () => {
                     variant="outline"
                     size="sm"
                     disabled={deleteLoadingId === customer.id}
-                    onClick={() => handleDeleteCustomer(customer.id)}
+                    onClick={() => handleDeleteCustomer(customer)}
                     className="bg-white/90 hover:bg-white text-red-600 hover:text-red-700"
                   >
                     {deleteLoadingId === customer.id ? (

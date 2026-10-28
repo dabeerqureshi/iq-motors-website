@@ -3,20 +3,25 @@ import { useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
-import { Compass, Home, Car, Phone, ArrowLeft } from "lucide-react";
+import { Compass, Home, Car, Phone } from "lucide-react";
+import { NOT_FOUND, useSeo } from "@/lib/seo";
 
 const NotFound = () => {
   const location = useLocation();
 
+  // Soft-404s stay out of search index
+  useSeo({
+    title: NOT_FOUND.title,
+    description: NOT_FOUND.description,
+    path: location.pathname,
+    noindex: NOT_FOUND.noindex,
+  });
+
   useEffect(() => {
-    document.title = "Page Not Found | IQ Motors Limited";
     console.warn(
       "404 Error: User attempted to access non-existent route:",
       location.pathname
     );
-    return () => {
-      document.title = "IQ Motors Limited | Mercedes-Benz Specialists in Ealing, London";
-    };
   }, [location.pathname]);
 
   return (
@@ -37,7 +42,7 @@ const NotFound = () => {
               Page Not Found
             </h1>
             <p className="text-gray-600 text-sm mt-2">
-              We couldn't find the page you're looking for. It may have been moved, renamed, or no longer exists.
+              The page at <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">{location.pathname}</span> does not exist or has been moved.
             </p>
           </div>
 

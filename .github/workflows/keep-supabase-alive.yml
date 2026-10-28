@@ -2,28 +2,88 @@ name: Keep Supabase Project Active
 
 on:
   schedule:
-    # Runs every Monday at 06:00 UTC. Supabase free-tier projects auto-pause
-    # after ~1 week of inactivity; this weekly ping keeps the project online.
-    - cron: "0 6 * * 1"
+    # Twice a week (Mon + Thu, 06:00 UTC). Supabase free-tier projects pause after
+    # ~7 days without API activity and GitHub can delay scheduled runs by hours,
+    # so a single weekly ping has no margin.
+    - cron: "0 6 * * 1,4"
   workflow_dispatch: # allows manual trigger from the GitHub Actions tab
+
+permissions:
+  contents: read
 
 jobs:
   keep-alive:
+    name: Ping Supabase
     runs-on: ubuntu-latest
+    env:
+      # Accept either naming convention: VITE_* (what Vercel and ci.yml use) or the
+      # plain names that used to be documented in the README.
+      SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
     steps:
       - name: Ping Supabase REST API
         run: |
-          # A lightweight read-only query that keeps the project from pausing.
-          curl -fsS --max-time 30 \
-            "${{ secrets.VITE_SUPABASE_URL }}/rest/v1/stock_list?select=id&limit=1" \
-            -H "apikey: ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
-            -o /dev/null
+          set -euo pipefail
+
+          # Secret values are often pasted with a trailing newline. Browsers strip
+          # tab/newline characters out of URLs (so the deployed site works and the
+          # mistake goes unnoticed), but curl rejects them outright with
+          #   curl: (3) URL rejected: Malformed input to a URL function
+          # which is exactly how this job used to fail. Strip all whitespace.
+          url="$(printf '%s' "${SUPABASE_URL}" | tr -d '[:space:]')"
+          key="$(printf '%s' "${SUPABASE_ANON_KEY}" | tr -d '[:space:]')"
+
+          if [ -z "$url" ] || [ -z "$key" ]; then
+            echo "::error title=Supabase secrets missing::Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY under Settings -> Secrets and variables -> Actions (repository secrets)."
+            exit 1
+          fi
+
+          url="${url%/}" # tolerate a trailing slash
+          endpoint="${url}/rest/v1/stock_list?select=id&limit=1"
+
+          echo "Pinging ${url} -> GET /rest/v1/stock_list?select=id&limit=1"
+
+          # A lightweight read-only query. curl prints 000 in %{http_code} when it
+          # never got a response, which is what a paused/unreachable project looks
+          # like, so keep that as our own value instead of failing the shell.
+          status="$(curl -sS -o /tmp/supabase-body.txt -w '%{http_code}' \
+            --max-time 30 --retry 3 --retry-all-errors \
+            -H "apikey: ${key}" -H "Authorization: Bearer ${key}" \
+            "${endpoint}" || true)"
+          status="${status:-000}"
+
+          case "$status" in
+            2*)
+              echo "Supabase responded ${status} - the project is awake."
+              ;;
+            401 | 403)
+              echo "::error title=Supabase rejected the key::HTTP ${status} - the anon key is wrong or was rotated. Update the VITE_SUPABASE_ANON_KEY secret."
+              exit 1
+              ;;
+            404)
+              echo "::error title=Wrong Supabase URL::HTTP 404 - VITE_SUPABASE_URL points at the wrong project, or stock_list is missing."
+              exit 1
+              ;;
+            000)
+              echo "::error title=Supabase unreachable::No HTTP response within 30s (after 3 retries). The project is probably paused or restoring - open Supabase -> Project Settings -> General."
+              exit 1
+              ;;
+            *)
+              echo "::error title=Supabase returned an error::HTTP ${status}"
+              head -c 500 /tmp/supabase-body.txt || true
+              exit 1
+              ;;
+          esac
 
       - name: Report status
         if: failure()
         run: |
-          echo "::warning title=Supabase unreachable::"
-          echo "The keep-alive request failed. The project may be paused,"
-          echo "suspended, or the access key may have rotated. Sign in to"
-          echo "Supabase and check Project Settings > General."
+          echo "::warning title=Supabase keep-alive failed::"
+          echo "Free-tier projects pause after ~7 days without API activity, and a"
+          echo "paused project takes the live inventory and the admin portal with it."
+          echo "1) Supabase -> Project Settings -> General: resume the project."
+          echo "2) Actions -> Keep Supabase Project Active -> Run workflow (no commit needed)."
+          echo "3) Still failing? Re-save the secrets under Settings -> Secrets and"
+          echo "   variables -> Actions, pasting each value WITHOUT a trailing newline."
+          echo "   A URL ending in a newline used to break this ping with"
+          echo "   'curl: (3) URL rejected: Malformed input to a URL function'."

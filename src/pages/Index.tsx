@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Hero from "@/components/Hero";
-import CarCard, { Car } from "@/components/CarCard";
+import CarCard, { type Car } from "@/components/CarCard";
 import BrandCertifications from "@/components/BrandCertifications";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { supabase, DatabaseHappyCustomer } from "@/supabase/supabase";
+import { supabase } from "@/supabase/supabase";
 import AnimatedSection from "@/components/AnimatedSection";
 import {
   Award,
@@ -19,78 +19,112 @@ import {
   Star,
   CheckCircle2,
 } from "lucide-react";
+import { useSeo, pageSeo } from "@/lib/seo";
+
+interface StockRow {
+  id: string | number;
+  title: string;
+  year: string | number | null;
+  price: number | string | null;
+  description: string | null;
+  image_url: string[] | string | null;
+  miles_driven: string | number | null;
+  attributes: string[] | null;
+}
+
+interface FeaturedTestimonial {
+  id: string | number;
+  image_url: string | null;
+}
+
+const toFeaturedCar = (item: StockRow): Car => ({
+  id: item.id,
+  title: item.title,
+  make: "Mercedes-Benz",
+  model: item.title.split(" ").slice(-1)[0] || "",
+  year: Number(item.year),
+  price: Number(item.price),
+  description: item.description || "",
+  imageUrl: Array.isArray(item.image_url)
+    ? item.image_url
+    : item.image_url
+      ? [item.image_url]
+      : [],
+  mileage: Number(String(item.miles_driven ?? "").replace(/,/g, "")) || 0,
+  features: Array.isArray(item.attributes) ? item.attributes : [],
+  isSold: false,
+});
 
 const Index = () => {
   const [featuredCars, setFeaturedCars] = useState<Car[]>([]);
-  const [featuredTestimonials, setFeaturedTestimonials] = useState<DatabaseHappyCustomer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [featuredTestimonials, setFeaturedTestimonials] = useState<
+    FeaturedTestimonial[]
+  >([]);
+  const [carsLoading, setCarsLoading] = useState(true);
+  const [testimonialsLoading, setTestimonialsLoading] = useState(true);
+  const [carsError, setCarsError] = useState(false);
+  const [testimonialsError, setTestimonialsError] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const fetchHomeData = async () => {
-      setLoading(true);
+    // Fetched independently so that a failure in one section cannot blank out the other
+    const fetchFeaturedCars = async () => {
       try {
-        // Fetch featured cars from stock_list where is_available = true
-        const { data: carsData, error: carsError } = await supabase
+        setCarsLoading(true);
+        setCarsError(false);
+
+        const { data: carsData, error: carsErr } = await supabase
           .from("stock_list")
           .select("*")
           .eq("is_available", true)
           .order("created_at", { ascending: false })
           .limit(6);
 
-        if (carsError) throw carsError;
+        if (carsErr) throw carsErr;
 
-        if (!cancelled && carsData) {
-          const formattedCars: Car[] = carsData.map((item) => ({
-            id: item.id,
-            title: item.title,
-            make: "Mercedes-Benz",
-            model: item.title.split(" ").slice(-1)[0] || "Unknown",
-            year: Number(item.year),
-            price: Number(item.price),
-            description: item.description || "",
-            imageUrl: Array.isArray(item.image_url)
-              ? item.image_url
-              : item.image_url
-                ? [item.image_url]
-                : [],
-            mileage: parseInt(String(item.miles_driven || "0").replace(/,/g, "")) || 0,
-            features: item.attributes || [],
-            isSold: false,
-          }));
-
-          setFeaturedCars(formattedCars);
-        }
-
-        // Fetch featured testimonials from happy_customers table
-        const { data: testimonialsData, error: testimonialsError } =
-          await supabase.from("happy_customers").select("*").order("created_at", { ascending: false }).limit(3);
-
-        if (testimonialsError) throw testimonialsError;
-
-        if (!cancelled && testimonialsData) {
-          setFeaturedTestimonials(testimonialsData);
-        }
+        setFeaturedCars(
+          ((carsData as StockRow[] | null) ?? []).map(toFeaturedCar)
+        );
       } catch (err) {
-        console.error("Error loading homepage data:", err);
-        if (!cancelled) {
-          setError("Failed to load homepage content.");
-        }
+        console.error("Error loading featured cars:", err);
+        setCarsError(true);
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        setCarsLoading(false);
       }
     };
 
-    fetchHomeData();
+    const fetchFeaturedCustomers = async () => {
+      try {
+        setTestimonialsLoading(true);
+        setTestimonialsError(false);
 
-    return () => {
-      cancelled = true;
+        const { data: testimonialsData, error: testimonialsErr } = await supabase
+          .from("happy_customers")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(3);
+
+        if (testimonialsErr) throw testimonialsErr;
+
+        setFeaturedTestimonials(
+          (testimonialsData as FeaturedTestimonial[] | null) ?? []
+        );
+      } catch (err) {
+        console.error("Error loading happy customers:", err);
+        setTestimonialsError(true);
+      } finally {
+        setTestimonialsLoading(false);
+      }
     };
+
+    fetchFeaturedCars();
+    fetchFeaturedCustomers();
   }, []);
+
+  useSeo(
+    pageSeo("/", {
+      cars: featuredCars.map((car) => ({ id: car.id, title: car.title })),
+    })
+  );
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -115,7 +149,7 @@ const Index = () => {
               </p>
             </div>
 
-            {loading ? (
+            {carsLoading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-8">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <div key={i} className="bg-white rounded-lg shadow-sm border p-4 space-y-4 animate-pulse">
@@ -126,7 +160,7 @@ const Index = () => {
                   </div>
                 ))}
               </div>
-            ) : error ? (
+            ) : carsError ? (
               <div className="text-center py-12 text-gray-600 max-w-md mx-auto">
                 <p className="text-lg font-medium text-gray-800 mb-2">Notice</p>
                 <p className="text-sm mb-4">We are updating our live inventory. Please browse all cars or contact our showroom directly.</p>
@@ -284,13 +318,13 @@ const Index = () => {
               </p>
             </div>
 
-            {loading ? (
+            {testimonialsLoading ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <div key={i} className="h-80 bg-gray-200 rounded-lg animate-pulse" />
                 ))}
               </div>
-            ) : error ? (
+            ) : testimonialsError ? (
               <div className="text-center py-8 text-gray-600">
                 Customer gallery is loading. Please check back shortly.
               </div>

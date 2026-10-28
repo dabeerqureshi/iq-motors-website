@@ -3,9 +3,12 @@ import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import FinanceCalculator from "@/components/FinanceCalculator";
-import { CheckCircle2, Phone, MessageSquare, ArrowRight } from "lucide-react";
+import { CheckCircle2, Phone, ArrowRight } from "lucide-react";
+import { useSeo, pageSeo } from "@/lib/seo";
 
 const Finance = () => {
+  useSeo(pageSeo("/finance"));
+
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />

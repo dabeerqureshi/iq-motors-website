@@ -1,27 +1,24 @@
-import { useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ContactForm from "@/components/ContactForm";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
-  Wrench,
-  Clock,
-  Truck,
   MapPin,
   Phone,
   Mail,
   PhoneCall,
   Check,
 } from "lucide-react";
+import { useSeo, pageSeo, defaultBreadcrumb } from "@/lib/seo";
 
 const Servicing = () => {
-  useEffect(() => {
-    document.title = "Mercedes-Benz Servicing, Diagnostics & MOT | IQ Motors Limited";
-    return () => {
-      document.title = "IQ Motors Limited | Mercedes-Benz Specialists in Ealing, London";
-    };
-  }, []);
+  useSeo(
+    pageSeo("/servicing", {
+      breadcrumb: defaultBreadcrumb("/servicing"),
+      cars: [],
+    })
+  );
+
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
@@ -93,9 +90,6 @@ const Servicing = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
               <Card className="p-6 border-md border-cardealer-primary">
                 <div className="flex flex-col items-center text-center">
-                  {/* <div className="w-16 h-16 bg-cardealer-primary rounded-full flex items-center justify-center text-white text-2xl mb-4">
-                    <Wrench size={28} />
-                  </div> */}
                   <h3 className="text-xl font-bold mb-4">
                     Top Reasons to Choose IQmotors
                   </h3>
@@ -147,7 +141,7 @@ const Servicing = () => {
                   <div className="flex flex-col items-center mt-4">
                     <p className="text-gray-600 font-bold">
                       <PhoneCall size={18} className="inline-block mr-2" />
-                      <a href="tel:07877028198" className="hover:underline">
+                      <a href="tel:+447877028198" className="hover:underline">
                         07877 028198
                       </a>{" "}
                       or
@@ -155,7 +149,7 @@ const Servicing = () => {
 
                     <p className="text-gray-600 font-bold">
                       <Mail size={18} className="inline-block mr-2" />{" "}
-                      iqmotors0@gmail.com
+                      info@iqmotorslimited.com
                     </p>
                   </div>
                 </div>
@@ -266,7 +260,7 @@ const Servicing = () => {
                     <p className="pl-7">EALING</p>
                     <p className="pl-7 mb-2">W13 9RL</p>
                     <a
-                      href="tel:07877028198"
+                      href="tel:+447877028198"
                       className="flex items-center mb-2 hover:underline"
                     >
                       <Phone className="mr-2 h-5 w-5 text-cardealer-primary" />
@@ -275,7 +269,7 @@ const Servicing = () => {
 
                     <p className="flex items-center mb-2">
                       <Mail className="mr-2 h-5 w-5 text-cardealer-primary" />
-                      <span className="font-semibold">iqmotors0@gmail.com</span>
+                      <span className="font-semibold">info@iqmotorslimited.com</span>
                     </p>
                   </div>
                   <p className="mt-4 mb-2">

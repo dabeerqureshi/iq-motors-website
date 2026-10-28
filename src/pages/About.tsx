@@ -1,17 +1,12 @@
-import { useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { ShieldCheck, Award, HeartHandshake, Phone } from "lucide-react";
+import { ShieldCheck, Award, HeartHandshake } from "lucide-react";
+import { useSeo, pageSeo } from "@/lib/seo";
 
 const About = () => {
-  useEffect(() => {
-    document.title = "About Us | IQ Motors Limited Mercedes-Benz Specialists";
-    return () => {
-      document.title = "IQ Motors Limited | Mercedes-Benz Specialists in Ealing, London";
-    };
-  }, []);
+  useSeo(pageSeo("/about"));
 
   return (
     <div className="min-h-screen flex flex-col">

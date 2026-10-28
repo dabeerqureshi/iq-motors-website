@@ -1,19 +1,15 @@
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import CustomerCard from "@/components/CustomerCard";
 import { useHappyCustomers } from "@/hooks/useHappyCustomers";
 import { Star } from "lucide-react";
+import { useSeo, pageSeo } from "@/lib/seo";
 
 const HappyCustomers = () => {
   const { customers: dbCustomers, loading, error } = useHappyCustomers();
 
-  useEffect(() => {
-    document.title = "Happy Customers & Handover Moments | IQ Motors Limited";
-    return () => {
-      document.title = "IQ Motors Limited | Mercedes-Benz Specialists in Ealing, London";
-    };
-  }, []);
+  useSeo(pageSeo("/customers"));
 
   const allCustomers = useMemo(() => {
     return dbCustomers.map((customer, index) => ({

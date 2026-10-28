@@ -2,8 +2,11 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ContactForm from "@/components/ContactForm";
 import { MapPin, Phone, Mail, MessageCircle, Clock, CheckCircle } from "lucide-react";
+import { useSeo, pageSeo } from "@/lib/seo";
 
 const Contact = () => {
+  useSeo(pageSeo("/contact"));
+
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
@@ -85,12 +88,12 @@ const Contact = () => {
                       <Mail className="h-5 w-5 text-cardealer-primary shrink-0" />
                       <div>
                         <a
-                          href="mailto:iqmotors0@gmail.com"
+                          href="mailto:info@iqmotorslimited.com"
                           className="font-medium text-gray-900 hover:text-cardealer-primary transition-colors text-sm"
                         >
-                          iqmotors0@gmail.com
+                          info@iqmotorslimited.com
                         </a>
-                        <span className="text-xs text-gray-500 block">General & sales enquiries</span>
+                        <span className="text-xs text-gray-500 block">iqmotors0@gmail.com</span>
                       </div>
                     </div>
                   </div>

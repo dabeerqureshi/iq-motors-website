@@ -1,6 +1,6 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from "react";
-import { supabase } from "@/supabase/supabase";
-import { User, Session } from "@supabase/supabase-js";
+import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import { supabase } from '@/supabase/supabase';
+import { User, Session, AuthError } from '@supabase/supabase-js';
 
 interface AuthContextType {
   user: User | null;
@@ -12,6 +12,45 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const describeLoginError = (error: unknown): string => {
+  if (!error) return 'Login failed. Please try again.';
+
+  const message =
+    typeof error === 'object' && error !== null && 'message' in error
+      ? String((error as { message: unknown }).message)
+      : '';
+  const status =
+    typeof error === 'object' && error !== null && 'status' in error
+      ? Number((error as { status: unknown }).status)
+      : 0;
+
+  // Most common: wrong password or email not in auth.users
+  if (
+    message.toLowerCase().includes('invalid login credentials') ||
+    status === 400
+  ) {
+    return 'Invalid email or password. Please check your credentials and try again.';
+  }
+
+  // Rate-limiting / brute-force protection triggered
+  if (
+    message.toLowerCase().includes('rate limit') ||
+    status === 429
+  ) {
+    return 'Too many login attempts. Please wait a minute before trying again.';
+  }
+
+  // Network or DNS failure contacting Supabase
+  if (
+    message.toLowerCase().includes('fetch') ||
+    message.toLowerCase().includes('network')
+  ) {
+    return 'Could not reach the authentication server. Please check your internet connection.';
+  }
+
+  return message || 'Login failed. Please try again.';
+};
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -25,56 +64,50 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Deferred admin check. Must NOT be awaited inside onAuthStateChange:
     // awaiting supabase queries within that callback deadlocks the auth
     // lock (supabase-js v2) and leaves the app stuck on the loading state.
-    const checkAdmin = (currentSession: Session | null) => {
-      setSession(currentSession);
-      setUser(currentSession?.user ?? null);
+    const checkAdmin = (session: Session | null) => {
+      setSession(session);
+      setUser(session?.user ?? null);
 
-      if (!currentSession?.user?.email) {
+      if (!session?.user) {
         setIsAdmin(false);
         setLoading(false);
         return;
       }
 
-      const email = currentSession.user.email;
-
       // setTimeout(0) escapes the auth-lock call stack before querying
       setTimeout(async () => {
         try {
           const { data, error } = await supabase
-            .from("admin_users")
-            .select("id, email")
-            .eq("email", email)
+            .from('admin_users')
+            .select('id')
+            .ilike('email', session.user!.email ?? '')
             .maybeSingle();
 
           if (!mounted) return;
-          if (error) {
-            console.error("Admin check failed:", error.message);
-          }
-          setIsAdmin(!error && Boolean(data));
-        } catch (err) {
+          if (error) console.error('Admin check failed:', error.message);
+          setIsAdmin(!error && !!data);
+        } catch {
           if (!mounted) return;
-          console.error("Admin check error:", err);
           setIsAdmin(false);
         } finally {
-          if (mounted) {
-            setLoading(false);
-          }
+          if (mounted) setLoading(false);
         }
       }, 0);
     };
 
     // Set up auth state listener
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, newSession) => {
-      console.log("Auth state changed:", event, newSession?.user?.email);
-      checkAdmin(newSession);
-    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (import.meta.env.DEV) {
+          console.debug('Auth state changed:', event);
+        }
+        checkAdmin(session);
+      }
+    );
 
     // Check for existing session
-    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
-      console.log("Initial session check:", initialSession?.user?.email);
-      checkAdmin(initialSession);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      checkAdmin(session);
     });
 
     return () => {
@@ -84,39 +117,60 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const login = async (email: string, password: string) => {
+    const normalisedEmail = email.trim().toLowerCase();
+
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: normalisedEmail,
         password,
       });
 
       if (error) {
-        console.error("Login error:", error.message);
-        return { error: "Invalid admin credentials" };
+        console.error("Login error:", error.status, error.code, error.message);
+        return { error: describeLoginError(error) };
       }
 
-      // Check if user is in admin_users table
+      // Always match the admin row against the email the session actually has:
+      // Supabase Auth lower-cases addresses, so comparing with the raw input
+      // used to reject valid logins (and lock out anyone who typed a capital).
+      const sessionEmail = data.user?.email?.toLowerCase() ?? normalisedEmail;
+
       const { data: adminUser, error: adminError } = await supabase
         .from("admin_users")
         .select("id, email")
-        .eq("email", email)
+        .ilike("email", sessionEmail)
         .maybeSingle();
 
-      if (adminError || !adminUser) {
+      if (adminError) {
+        console.error("Admin lookup failed:", adminError.code, adminError.message);
         await supabase.auth.signOut();
-        return { error: "Invalid admin credentials" };
+        return {
+          error:
+            "We could not verify your admin access. Please try again, and contact the site owner if it keeps failing.",
+        };
       }
 
-      // Update last login
-      await supabase
+      if (!adminUser) {
+        await supabase.auth.signOut();
+        return {
+          error: `${sessionEmail} is not an admin account. Ask the site owner to add it to the admin list.`,
+        };
+      }
+
+      // Update last login (best effort: a failure here must not block login).
+      const { error: lastLoginError } = await supabase
         .from("admin_users")
         .update({ last_login: new Date().toISOString() })
-        .eq("email", email);
+        .eq("email", adminUser.email);
+
+      if (lastLoginError) {
+        console.warn("Could not stamp last_login:", lastLoginError.message);
+      }
 
       return { error: null };
     } catch (error) {
       console.error("Login error:", error);
-      return { error: "Login failed" };
+      return { error: describeLoginError(error) };
     }
   };
 
@@ -125,16 +179,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        session,
-        isAdmin,
-        login,
-        logout,
-        loading,
-      }}
-    >
+    <AuthContext.Provider value={{
+      user,
+      session,
+      isAdmin,
+      login,
+      logout,
+      loading
+    }}>
       {children}
     </AuthContext.Provider>
   );
@@ -143,7 +195,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
 };

@@ -7,11 +7,16 @@ import { useToast } from "@/components/ui/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useSearchParams } from "react-router-dom";
-import { Phone, MessageCircle, Mail, Send, CheckCircle2, AlertCircle } from "lucide-react";
+import { Phone, MessageCircle, Send, CheckCircle2, AlertCircle } from "lucide-react";
 
 const serviceId = import.meta.env.VITE_SERVICE_ID_EMAILJS || "";
 const templateId = import.meta.env.VITE_TEMPLATE_ID_EMAILJS || "";
 const publicKey = import.meta.env.VITE_PUBLIC_KEY_EMAILJS || "";
+
+// Vite inlines these at build time; surface clear message if missing
+const isEmailJsConfigured = Boolean(
+  serviceId && templateId && publicKey && !serviceId.includes("placeholder")
+);
 
 interface ContactFormProps {
   defaultEnquiryType?: string;
@@ -91,24 +96,21 @@ const ContactForm = ({ defaultEnquiryType, defaultVehicle }: ContactFormProps) =
 
     if (!formRef.current || isSubmitting) return;
 
+    if (!isEmailJsConfigured) {
+      toast({
+        title: "Contact form offline",
+        description: "Email delivery is not configured on this environment. Please call 07877 028198 or message via WhatsApp.",
+        variant: "destructive",
+      });
+      setSubmitError("Please call 07877 028198 or use WhatsApp below to connect directly with our showroom.");
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmitError(null);
 
-    // If EmailJS credentials are not present or placeholder, simulate safe fallback
-    const hasEmailJs =
-      serviceId &&
-      templateId &&
-      publicKey &&
-      !serviceId.includes("placeholder");
-
     try {
-      if (hasEmailJs) {
-        await emailjs.sendForm(serviceId, templateId, formRef.current, publicKey);
-      } else {
-        // Fallback for demo or development without third-party email account
-        console.warn("EmailJS credentials not configured; recording local simulated submission.");
-        await new Promise((resolve) => setTimeout(resolve, 800));
-      }
+      await emailjs.sendForm(serviceId, templateId, formRef.current, publicKey);
 
       setSubmitSuccess(true);
       toast({
@@ -121,8 +123,8 @@ const ContactForm = ({ defaultEnquiryType, defaultVehicle }: ContactFormProps) =
         "We could not send your message automatically right now. Please call or WhatsApp our team directly."
       );
       toast({
-        title: "Notice sending enquiry",
-        description: "Please reach us directly on 07877 028198 or via WhatsApp.",
+        title: "Error submitting request",
+        description: "Please call us on 07877 028198 or contact us via WhatsApp.",
         variant: "destructive",
       });
     } finally {
@@ -242,7 +244,6 @@ const ContactForm = ({ defaultEnquiryType, defaultVehicle }: ContactFormProps) =
           </div>
         </div>
 
-        {/* Vehicle Registration & Mileage (Required for Servicing, Optional for Part Exchange / Sales) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <Label htmlFor="vehicle_registration" className="text-gray-700 font-semibold text-sm">

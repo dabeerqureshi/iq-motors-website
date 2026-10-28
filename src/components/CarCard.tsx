@@ -26,21 +26,50 @@ interface CarCardProps {
   linkTo?: string;
 }
 
+/**
+ * Rows created before `image_url` became an array (or edited by hand) can hold a
+ * scalar string. Normalising here keeps `.length`/`[0]`/`.map` safe everywhere.
+ */
+const toImageArray = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.filter(
+      (item): item is string => typeof item === "string" && item.trim().length > 0
+    );
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    return [value];
+  }
+  return [];
+};
+
 const CarCard = ({ car, linkTo }: CarCardProps) => {
   const [isModalOpen, setModalOpen] = useState(false);
 
-  const formattedPrice = new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "GBP",
-    maximumFractionDigits: 0,
-  }).format(car.price);
+  // Missing/invalid data must never render as "£NaN" or "NaN miles".
+  const hasPrice =
+    typeof car.price === "number" && Number.isFinite(car.price) && car.price > 0;
+  const formattedPrice = hasPrice
+    ? new Intl.NumberFormat("en-GB", {
+        style: "currency",
+        currency: "GBP",
+        maximumFractionDigits: 0,
+      }).format(car.price)
+    : "Price on request";
 
-  const formattedMileage = new Intl.NumberFormat("en-GB").format(car.mileage);
+  const hasMileage =
+    typeof car.mileage === "number" &&
+    Number.isFinite(car.mileage) &&
+    car.mileage > 0;
+  const formattedMileage = hasMileage
+    ? new Intl.NumberFormat("en-GB").format(car.mileage)
+    : null;
 
-  const images =
-    car.galleryImages && car.galleryImages.length > 0
-      ? car.galleryImages
-      : car.imageUrl;
+  const hasYear = Number.isFinite(Number(car.year)) && Number(car.year) > 0;
+
+  const galleryImages = toImageArray(car.galleryImages);
+  const images = galleryImages.length > 0 ? galleryImages : toImageArray(car.imageUrl);
+
+  const features = Array.isArray(car.features) ? car.features : [];
 
   const handleCardClick = () => {
     if (!linkTo) setModalOpen(true);
@@ -60,7 +89,7 @@ const CarCard = ({ car, linkTo }: CarCardProps) => {
         )}
 
         {car.isSold && (
-          <div className="absolute top-0 right-0 bg-red-600 text-white px-3 py-1 m-2 rounded-md font-bold z-10">
+          <div className="absolute top-0 right-0 bg-red-600 text-white px-3 py-1 m-2 rounded-md font-bold z-20">
             SOLD
           </div>
         )}
@@ -74,11 +103,13 @@ const CarCard = ({ car, linkTo }: CarCardProps) => {
           {formattedPrice}
         </p>
         <div className="flex flex-wrap gap-2 mb-3">
+          {hasYear && (
+            <Badge variant="outline" className="bg-gray-100">
+              {car.year}
+            </Badge>
+          )}
           <Badge variant="outline" className="bg-gray-100">
-            {car.year}
-          </Badge>
-          <Badge variant="outline" className="bg-gray-100">
-            {formattedMileage} miles
+            {formattedMileage ? `${formattedMileage} miles` : "Mileage on request"}
           </Badge>
         </div>
         <p className="text-gray-600 line-clamp-3">{car.description}</p>
@@ -87,7 +118,7 @@ const CarCard = ({ car, linkTo }: CarCardProps) => {
       <CardFooter className="flex flex-col gap-4">
         <div className="flex justify-between items-center w-full">
           <div className="flex gap-2 flex-wrap">
-            {car.features.slice(0, 3).map((feature, index) => (
+            {features.slice(0, 3).map((feature, index) => (
               <Badge
                 key={index}
                 variant="secondary"
@@ -110,11 +141,31 @@ const CarCard = ({ car, linkTo }: CarCardProps) => {
   return (
     <>
       {linkTo ? (
-        <Link to={linkTo} className="block h-full" aria-label={`View details of ${car.title}`} data-testid="car-card">
-          <Card className={cardClasses}>{cardInner}</Card>
-        </Link>
+        <Card className={`${cardClasses} relative`} data-testid="car-card">
+          {cardInner}
+          {/* Stretched link: the gallery controls stay outside the anchor so
+              clicking an image arrow no longer navigates to the car page. */}
+          <Link
+            to={linkTo}
+            aria-label={`View details of ${car.title}`}
+            className="absolute inset-0 z-10 rounded-lg focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-cardealer-primary"
+          />
+        </Card>
       ) : (
-        <Card onClick={handleCardClick} className={cardClasses} data-testid="car-card">
+        <Card
+          onClick={handleCardClick}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              handleCardClick();
+            }
+          }}
+          role="button"
+          tabIndex={0}
+          aria-label={`View details of ${car.title}`}
+          className={cardClasses}
+          data-testid="car-card"
+        >
           {cardInner}
         </Card>
       )}

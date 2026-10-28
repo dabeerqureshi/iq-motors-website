@@ -54,12 +54,20 @@ export const useHappyCustomers = () => {
 
   const deleteCustomer = async (id: string | number) => {
     try {
-      const { error } = await supabase
+      // Request the deleted rows back: RLS can silently filter a DELETE to
+      // 0 rows, which would otherwise be reported as a success.
+      const { data, error } = await supabase
         .from("happy_customers")
         .delete()
-        .eq("id", id);
+        .eq("id", id)
+        .select("id");
 
       if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error(
+          "The server did not allow this deletion. Your session may have expired - please log out and log back in, then try again."
+        );
+      }
       await fetchCustomers();
 
       return { error: null };

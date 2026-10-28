@@ -1,4 +1,5 @@
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
+import type { KeyboardEvent, MouseEvent } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface CarImageGalleryProps {
@@ -12,8 +13,15 @@ const CarImageGallery = ({
   mainImage,
   carTitle,
 }: CarImageGalleryProps) => {
-  const allImages = mainImage ? [mainImage, ...images] : images;
+  // Defensive: a legacy row could hold a scalar string or null instead of an array.
+  const safeImages = Array.isArray(images) ? images.filter(Boolean) : [];
+  const allImages = mainImage ? [mainImage, ...safeImages] : safeImages;
   const [current, setCurrent] = useState(0);
+
+  // Keep the active index in range when the image list changes (e.g. car swap)
+  useEffect(() => {
+    setCurrent((c) => (c >= allImages.length ? 0 : c));
+  }, [allImages.length]);
 
   const prev = useCallback(
     () => setCurrent((c) => (c === 0 ? allImages.length - 1 : c - 1)),
@@ -25,14 +33,22 @@ const CarImageGallery = ({
   );
 
   // Keyboard navigation scoped to this gallery container when focused
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "ArrowLeft") {
       e.preventDefault();
+      e.stopPropagation();
       prev();
     } else if (e.key === "ArrowRight") {
       e.preventDefault();
+      e.stopPropagation();
       next();
     }
+  };
+
+  const handleControl = (e: MouseEvent<HTMLButtonElement>, action: () => void) => {
+    e.preventDefault();
+    e.stopPropagation();
+    action();
   };
 
   // Single image: render directly
@@ -71,12 +87,8 @@ const CarImageGallery = ({
       </div>
 
       <button
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          prev();
-        }}
-        className="absolute left-2.5 top-1/2 -translate-y-1/2 z-20 h-9 w-9 rounded-full bg-white/90 shadow-md flex items-center justify-center text-gray-800 hover:bg-white hover:scale-105 active:scale-95 transition-all"
+        onClick={(e) => handleControl(e, prev)}
+        className="absolute left-2.5 top-1/2 -translate-y-1/2 z-20 h-9 w-9 rounded-full bg-white/90 shadow-md flex items-center justify-center text-gray-800 hover:bg-white hover:scale-105 active:scale-95 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cardealer-primary"
         aria-label="Previous image"
         type="button"
       >
@@ -84,12 +96,8 @@ const CarImageGallery = ({
       </button>
 
       <button
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          next();
-        }}
-        className="absolute right-2.5 top-1/2 -translate-y-1/2 z-20 h-9 w-9 rounded-full bg-white/90 shadow-md flex items-center justify-center text-gray-800 hover:bg-white hover:scale-105 active:scale-95 transition-all"
+        onClick={(e) => handleControl(e, next)}
+        className="absolute right-2.5 top-1/2 -translate-y-1/2 z-20 h-9 w-9 rounded-full bg-white/90 shadow-md flex items-center justify-center text-gray-800 hover:bg-white hover:scale-105 active:scale-95 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cardealer-primary"
         aria-label="Next image"
         type="button"
       >
@@ -101,17 +109,14 @@ const CarImageGallery = ({
         {allImages.map((_, i) => (
           <button
             key={i}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setCurrent(i);
-            }}
+            onClick={(e) => handleControl(e, () => setCurrent(i))}
             className={`h-2 transition-all rounded-full ${
               i === current
                 ? "w-6 bg-white shadow-sm"
                 : "w-2 bg-white/50 hover:bg-white/80"
             }`}
             aria-label={`Go to photo ${i + 1}`}
+            aria-current={i === current}
             type="button"
           />
         ))}

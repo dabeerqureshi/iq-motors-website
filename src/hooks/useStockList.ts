@@ -1,34 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/supabase/supabase";
 import { Car } from "@/components/CarCard";
-
-interface StockListItem {
-  id: number;
-  title: string;
-  price: number;
-  // DB stores year as text; normalize to number in convertToCar
-  year: string | number;
-  miles_driven: string | null;
-  description: string | null;
-  attributes: string[] | null;
-  is_available: boolean;
-  image_url: string[] | null;
-  created_at: string;
-}
-
-const convertToCar = (item: StockListItem, isSold = false): Car => ({
-  id: item.id,
-  title: item.title,
-  make: "Mercedes-Benz", // default
-  model: item.title.split(" ").slice(-1)[0] || "Unknown",
-  year: Number(item.year),
-  price: Number(item.price),
-  description: item.description || "",
-  imageUrl: item.image_url || [],
-  mileage: parseInt((item.miles_driven || "0").replace(/,/g, "")) || 0,
-  features: item.attributes || [],
-  isSold,
-});
+import { toCar } from "@/lib/stock";
 
 export const useStockList = () => {
   const [stockItems, setStockItems] = useState<Car[]>([]);
@@ -43,15 +16,20 @@ export const useStockList = () => {
       setStockLoading(true);
       setStockError(null);
 
+      // `is_available` can be NULL on rows created before the column existed, and
+      // NULL matches neither `true` nor `false` - which made those cars invisible
+      // on /stock *and* /sold. Treat anything that is not explicitly false as
+      // available, matching the admin panel (and sql/enable_rls.sql backs the
+      // column with a `true` default).
       const { data: stock_list, error } = await supabase
         .from("stock_list")
         .select("*")
-        .eq("is_available", true)
+        .or("is_available.is.null,is_available.eq.true")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
 
-      setStockItems((stock_list || []).map((item) => convertToCar(item, false)));
+      setStockItems((stock_list || []).map((item) => toCar(item, false)));
     } catch (err) {
       console.error("Error fetching stock list:", err);
       setStockError(
@@ -75,7 +53,7 @@ export const useStockList = () => {
 
       if (error) throw error;
 
-      setSoldCars((stock_list || []).map((item) => convertToCar(item, true)));
+      setSoldCars((stock_list || []).map((item) => toCar(item, true)));
     } catch (err) {
       console.error("Error fetching sold cars:", err);
       setSoldError(

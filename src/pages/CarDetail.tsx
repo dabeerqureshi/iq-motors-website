@@ -16,7 +16,6 @@ import {
   CheckCircle2,
   XCircle,
   MessageCircle,
-  FileCheck2,
   CalendarCheck,
   ShieldCheck,
 } from "lucide-react";
@@ -25,32 +24,8 @@ import CarImageGallery from "@/components/CarImageGallery";
 import AnimatedSection from "@/components/AnimatedSection";
 import FinanceCalculator from "@/components/FinanceCalculator";
 import { supabase } from "@/supabase/supabase";
-
-interface StockListItem {
-  id: number;
-  title: string;
-  price: number;
-  year: string | number;
-  miles_driven: string | null;
-  description: string | null;
-  attributes: string[] | null;
-  is_available: boolean;
-  image_url: string[] | null;
-}
-
-const convertToCar = (item: StockListItem): Car => ({
-  id: item.id,
-  title: item.title,
-  make: "Mercedes-Benz",
-  model: item.title.split(" ").slice(-1)[0] || "Unknown",
-  year: Number(item.year),
-  price: Number(item.price),
-  description: item.description || "",
-  imageUrl: Array.isArray(item.image_url) ? item.image_url : [],
-  mileage: parseInt((item.miles_driven || "0").replace(/,/g, "")) || 0,
-  features: item.attributes || [],
-  isSold: !item.is_available,
-});
+import { useSeo, vehicleSeo, vehicleSchema } from "@/lib/seo";
+import { toCar, StockRow } from "@/lib/stock";
 
 const CarDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -74,9 +49,7 @@ const CarDetail = () => {
         if (fetchError) throw fetchError;
 
         if (!cancelled && data) {
-          const loadedCar = convertToCar(data as StockListItem);
-          setCar(loadedCar);
-          document.title = `${loadedCar.title} | IQ Motors Limited`;
+          setCar(toCar(data as StockRow));
         }
       } catch (err) {
         console.error("Error fetching car:", err);
@@ -88,7 +61,6 @@ const CarDetail = () => {
     fetchCar();
     return () => {
       cancelled = true;
-      document.title = "IQ Motors Limited | Mercedes-Benz Specialists in Ealing, London";
     };
   }, [id]);
 
@@ -115,6 +87,41 @@ const CarDetail = () => {
 
   const whatsappMessage = encodeURIComponent(
     `Hello IQ Motors, I am interested in the ${car?.title ?? "vehicle"} (Ref: #${car?.id}) listed for ${formattedPrice}. Is it still available for a viewing?`
+  );
+
+  // SEO: set per-vehicle title/description/schema when we have the car data
+  useSeo(
+    car
+      ? {
+          ...vehicleSeo({
+            id: car.id,
+            title: car.title,
+            year: car.year,
+            price: car.price,
+            mileage: car.mileage,
+          }),
+          image: car.imageUrl[0] ?? undefined,
+          schema: [
+            vehicleSchema({
+              id: car.id,
+              title: car.title,
+              year: car.year,
+              price: car.price,
+              mileage: car.mileage,
+              description: car.description || undefined,
+              images: car.imageUrl,
+              isSold: car.isSold ?? false,
+            }),
+          ],
+        }
+      : {
+          title: "Vehicle Not Found | IQ Motors",
+          description:
+            "The vehicle page you were looking for does not exist. Browse our used Mercedes-Benz stock at IQ Motors in Ealing.",
+          path: `/car/${id ?? ""}`,
+          noindex: true,
+          schema: [],
+        }
   );
 
   if (loading) {
@@ -154,44 +161,9 @@ const CarDetail = () => {
 
   const images = car.imageUrl;
 
-  // Schema.org structured data for vehicle
-  const vehicleSchema = {
-    "@context": "https://schema.org",
-    "@type": "Car",
-    "name": car.title,
-    "brand": {
-      "@type": "Brand",
-      "name": "Mercedes-Benz"
-    },
-    "model": car.model,
-    "productionDate": String(car.year),
-    "mileageFromOdometer": {
-      "@type": "QuantitativeValue",
-      "value": car.mileage,
-      "unitCode": "SMI"
-    },
-    "offers": {
-      "@type": "Offer",
-      "price": car.price,
-      "priceCurrency": "GBP",
-      "availability": car.isSold ? "https://schema.org/SoldOut" : "https://schema.org/InStock",
-      "seller": {
-        "@type": "AutoDealer",
-        "name": "IQ Motors Limited",
-        "telephone": "+447877028198"
-      }
-    }
-  };
-
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
-
-      {/* Structured data injection */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(vehicleSchema) }}
-      />
 
       <main className="flex-grow bg-gray-50/50">
         <div className="container mx-auto px-4 py-8">

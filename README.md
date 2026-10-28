@@ -16,7 +16,7 @@ Tailwind CSS + shadcn-style UI), backed by Supabase.
 - Full vehicle detail pages (gallery carousel, specs, price, quick-contact)
 - Sold cars, happy customers, finance and servicing pages
 - Contact form powered by EmailJS
-- Admin dashboard (`/admin-IQmotors`) with stock + happy-customer management
+- Admin dashboard (`/admin-IQmotors`) with full stock-list management — add, **edit** and delete vehicle listings (with image uploads) — plus happy-customer management
 - Scroll-reveal animations that respect `prefers-reduced-motion`
 
 ## 🚀 Local development
@@ -57,9 +57,19 @@ in Vercel's build image).
 ## 🗄 Supabase setup
 
 1. Create a project and note its URL + anon key.
-2. Run the SQL in [`sql/enable_rls.sql`](sql/enable_rls.sql) via
-   **SQL Editor** — this enables Row Level Security (public read, admin-only
-   writes) and creates the `admin_users` table.
+2. Run the SQL files in the **SQL Editor**, in this order:
+   - [`sql/enable_rls.sql`](sql/enable_rls.sql) — enables Row Level Security
+     (public read, admin-only writes), backfills `is_available`, creates the
+     `admin_users` table and the `is_admin()` helper. **Admin writes (Mark Sold,
+     Back to Available, edit → save, delete) silently do nothing until the
+     UPDATE/DELETE policies exist**, so re-run it any time those buttons fail.
+   - [`sql/storage_policies.sql`](sql/storage_policies.sql) — creates the
+     `car-images` bucket plus the public-read / admin-write policies used by the
+     vehicle and happy-customer photo uploads.
+   - [`sql/diagnose_admin_writes.sql`](sql/diagnose_admin_writes.sql) — optional,
+     read-only. Prints the RLS flags, every policy with its `USING`/`WITH CHECK`,
+     `is_admin()`, the admin list, per-list row counts and the storage bucket in
+     one result set.
 3. Create your admin Auth user:
    - **Authentication → Users → Add user** (email + strong password)
    - Then add their row (replace the email):
@@ -208,12 +218,34 @@ production unnoticed.
 
 ## ♻ Keep the Supabase project awake
 
-Free-tier Supabase projects auto-pause after ~7 days of inactivity. The
-workflow in [`.github/workflows/keep-supabase-alive.yml`](.github/workflows/keep-supabase-alive.yml)
-pings the API weekly. To use it, add these **Actions secrets**:
+Free-tier Supabase projects auto-pause after ~7 days without API activity, which
+takes the live inventory and the admin portal down with it.
+[`.github/workflows/keep-supabase-alive.yml`](.github/workflows/keep-supabase-alive.yml)
+pings a read-only REST endpoint **twice a week** (Mon + Thu, 06:00 UTC) — twice,
+because GitHub can delay scheduled runs by hours and a paused project is a
+production outage.
 
-- `SUPABASE_URL` → `https://<project-ref>.supabase.co`
-- `SUPABASE_ANON_KEY` → your anon key
+Secrets live under **Settings → Secrets and variables → Actions**; the workflow
+accepts either naming convention:
+
+- `VITE_SUPABASE_URL` (preferred — same value as Vercel) or `SUPABASE_URL` → `https://<project-ref>.supabase.co`
+- `VITE_SUPABASE_ANON_KEY` (preferred) or `SUPABASE_ANON_KEY` → your anon key
+
+⚠️ **Paste secret values with no trailing newline.** Browsers strip tab/newline
+characters out of URLs, so a value stored as `https://xyz.supabase.co\n` still
+works on the deployed site — but `curl` refuses it with
+`curl: (3) URL rejected: Malformed input to a URL function`, which is precisely
+how this workflow used to fail on every run. The job now trims whitespace itself,
+but the stored value should be clean anyway.
+
+The job fails loudly (with a `::error::` annotation) when the project is
+unreachable (HTTP `000`), the key was rotated (`401`/`403`) or the URL is wrong
+(`404`). To recover: open Supabase → *Project Settings → General* and resume the
+project, then re-run the workflow from the Actions tab (*Run workflow*) — no commit
+needed.
+
+> GitHub disables scheduled workflows after ~60 days without repository activity.
+> If the pings stop, open the Actions tab and re-enable the workflow.
 
 ## 🧭 Routes
 
@@ -244,6 +276,10 @@ opened directly or refreshed without a 404.
 | Domain still shows the Hostinger parking page | DNS still points at the parking IP `2.57.91.91`; run `nslookup iqmotorslimited.com` and replace the parking `A`/`www` records with Vercel's (or switch nameservers to `ns1/ns2.vercel-dns.com`). |
 | Site shows Vercel's `404: DEPLOYMENT_NOT_FOUND` | The hostname reaches Vercel but no Production deployment serves it yet — merge to `main`, check the *Deployments* tab, then confirm the domain card reads "Valid Configuration". |
 | Domain shows "Invalid Configuration" in Vercel | The `A`/`CNAME` values do not match what Vercel shows, or extra records exist on the same hostname. |
-| `info@iqmotors.co.uk` bounces / no mailbox | `iq-motors.co.uk` does not exist (NXDOMAIN). Create a mailbox on `iqmotorslimited.com`, then update `src/pages/Contact.tsx` and the JSON-LD `email` in `index.html` (that one currently points at `iqmotors0@gmail.com`). |
+| `info@iqmotorslimited.com` bounces / no mailbox | The mailbox does not exist on the domain. Create it at the mail host for `iqmotorslimited.com`, and keep the address in sync in `src/pages/Contact.tsx`, `src/pages/Servicing.tsx`, `src/pages/CarDetail.tsx`, `src/components/Footer.tsx`, `src/data/seo.json` and the JSON-LD `email` in `index.html`. |
 | Mail on `iqmotorslimited.com` breaks after moving DNS to Vercel | MX/SPF/DKIM records were not copied into *Vercel → Domains → DNS Records* before the nameserver switch. |
 | Build fails with `EBADENGINE` / wrong Node | Node is pinned to `22.x` in `package.json`; make sure the Vercel project's *Node.js Version* is not overridden to a deprecated major. |
+| Build log says `Missing required environment variable(s)` but the deployment succeeds | Intentional since #13: the build only **warns** (the site falls back to empty states, a call-us contact form and a reload guard). Add the variables for that environment and redeploy to get real data back. |
+| Admin buttons (Mark Sold / Back to Available / Edit → Save / Delete) fail with *"the server did not allow this change"* | The write was filtered by Row Level Security, so 0 rows changed — reads and inserts keep working. Run [`sql/enable_rls.sql`](sql/enable_rls.sql) in the Supabase SQL editor, then [`sql/diagnose_admin_writes.sql`](sql/diagnose_admin_writes.sql) to confirm the `stock_list` UPDATE/DELETE policies exist and have a `using` clause. |
+| A vehicle is missing from both `/stock` and `/sold` (and from both admin tabs) | Its `is_available` is NULL, which matches neither list. Run [`sql/enable_rls.sql`](sql/enable_rls.sql) (backfills NULL → true) and re-save the listing. |
+| Admin photo upload fails with `Bucket not found`, or uploaded images 404 | The `car-images` bucket or its policies are missing — run [`sql/storage_policies.sql`](sql/storage_policies.sql). |
